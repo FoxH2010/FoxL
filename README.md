@@ -1,5 +1,5 @@
 # FoxL
-Fox Team's Programming Language Project.  
+Sharp Fox's Programming Language Project.  
 ## Description  
 This programming language (FoxL) was created, expect to be a high-level prgramming language that's ease to use for web-developer. Have a portability as Python, the speed and efficientcy directly by assembly code. Expected to be launch in several of years.  
 ## Credit  
