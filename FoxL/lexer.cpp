@@ -129,8 +129,21 @@ private:
     Token lexStringLiteral(char quoteType) {
         ++position; // consume the opening quote
         size_t start = position;
-
+        std::string value;
         while (position < source.size() && source[position] != quoteType) {
+            if (source[position] == '\\' && position + 1 < source.size()) {
+                ++position;
+                switch (source[position]) {
+                    case 'n': value += '\n'; break;
+                    case 't': value += '\t'; break;
+                    case '\\': value += '\\'; break;
+                    case '\'': value += '\''; break;
+                    case '"': value += '\"'; break;
+                    default: value += source[position]; break;
+                }
+            } else {
+                value += source[position];
+            }
             ++position;
         }
 
@@ -138,14 +151,13 @@ private:
             throw std::runtime_error("Unterminated string literal");
         }
 
-        std::string value = source.substr(start, position - start);
         ++position; // consume the closing quote
         return Token(TokenType::StringLiteral, value);
     }
 
     bool isKeyword(const std::string &str) const {
         static const std::vector<std::string> keywords = {
-            "if", "else", "while", "return", "int", "float", "char", "write", "read", "func", "for", "str", "bool", "double", "include"
+            "if", "else", "while", "return", "int", "float", "char", "write", "read", "func", "for", "str", "bool", "double", "include", "let"
         };
 
         for (const auto &keyword : keywords) {

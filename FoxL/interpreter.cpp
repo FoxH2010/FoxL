@@ -1,8 +1,10 @@
-#include "parser.cpp"
 #include <unordered_map>
 #include <functional>
 #include <cmath>
 #include <stdexcept>
+#include <variant>
+#include <iostream>
+#include <vector>
 
 class Interpreter {
 public:
@@ -13,64 +15,85 @@ public:
     }
 
 private:
-    std::unordered_map<std::string, int> intVariables;
-    std::unordered_map<std::string, double> doubleVariables;
-    std::unordered_map<std::string, std::string> strVariables;
-    std::unordered_map<std::string, bool> boolVariables;
-    std::unordered_map<std::string, std::vector<int>> intArrays;
-    std::unordered_map<std::string, std::vector<int>> intLists;
-    std::unordered_map<std::string, std::function<int(const std::vector<int>&)>> functions;
+    std::unordered_map<std::string, std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>> variables;
 
     void execute(const Statement* statement) {
         if (auto writeStmt = dynamic_cast<const WriteStatement*>(statement)) {
             if (writeStmt->isVariable) {
-                std::cout << intVariables[writeStmt->message] << std::endl;
+                if (variables.find(writeStmt->message) != variables.end()) {
+                    auto value = variables[writeStmt->message];
+                    std::visit([](auto&& arg) { printValue(arg); }, value);
+                } else {
+                    throw std::runtime_error("Undefined variable: " + writeStmt->message);
+                }
             } else {
                 std::cout << writeStmt->message << std::endl;
             }
         } else if (auto varDecl = dynamic_cast<const VariableDeclaration*>(statement)) {
-            if (varDecl->type == "int") {
-                int value = 0;
+            if (varDecl->type == "auto") {
                 if (varDecl->initializer) {
-                    value = evaluate(varDecl->initializer.get());
+                    auto initExpr = varDecl->initializer.get();
+                    if (auto numberExpr = dynamic_cast<NumberExpression*>(initExpr)) {
+                        variables[varDecl->name] = static_cast<int>(numberExpr->value);
+                    } else if (auto strExpr = dynamic_cast<StringExpression*>(initExpr)) {
+                        variables[varDecl->name] = strExpr->value;
+                    } else if (auto boolExpr = dynamic_cast<BoolExpression*>(initExpr)) {
+                        variables[varDecl->name] = boolExpr->value;
+                    } else if (auto arrayExpr = dynamic_cast<ArrayExpression*>(initExpr)) {
+                        if (!arrayExpr->elements.empty() && dynamic_cast<NumberExpression*>(arrayExpr->elements[0].get())) {
+                            std::vector<int> arrayValues;
+                            for (const auto& elem : arrayExpr->elements) {
+                                arrayValues.push_back(evaluate(elem.get()));
+                            }
+                            variables[varDecl->name] = arrayValues;
+                        } else if (!arrayExpr->elements.empty() && dynamic_cast<StringExpression*>(arrayExpr->elements[0].get())) {
+                            std::vector<std::string> arrayValues;
+                            for (const auto& elem : arrayExpr->elements) {
+                                arrayValues.push_back(evaluateString(elem.get()));
+                            }
+                            variables[varDecl->name] = arrayValues;
+                        } else {
+                            throw std::runtime_error("Unsupported initializer type for variable: " + varDecl->name);
+                        }
+                    } else if (auto readExpr = dynamic_cast<ReadExpression*>(initExpr)) {
+                        std::string input;
+                        std::getline(std::cin, input);
+                        if (isNumber(input)) {
+                            variables[varDecl->name] = std::stoi(input);
+                        } else {
+                            variables[varDecl->name] = input;
+                        }
+                    } else {
+                        throw std::runtime_error("Unsupported initializer type for variable: " + varDecl->name);
+                    }
+                } else {
+                    throw std::runtime_error("Variable '" + varDecl->name + "' has no initializer");
                 }
-                intVariables[varDecl->name] = value;
-            } else if (varDecl->type == "double") {
-                double value = 0.0;
+            } else {
                 if (varDecl->initializer) {
-                    value = evaluate(varDecl->initializer.get());
+                    if (varDecl->type == "int") {
+                        variables[varDecl->name] = evaluate(varDecl->initializer.get());
+                    } else if (varDecl->type == "double") {
+                        variables[varDecl->name] = evaluateDouble(varDecl->initializer.get());
+                    } else if (varDecl->type == "str") {
+                        variables[varDecl->name] = evaluateString(varDecl->initializer.get());
+                    } else if (varDecl->type == "bool") {
+                        variables[varDecl->name] = evaluate(varDecl->initializer.get()) != 0;
+                    }
+                } else {
+                    if (varDecl->type == "int") {
+                        variables[varDecl->name] = 0;
+                    } else if (varDecl->type == "double") {
+                        variables[varDecl->name] = 0.0;
+                    } else if (varDecl->type == "str") {
+                        variables[varDecl->name] = std::string("");
+                    } else if (varDecl->type == "bool") {
+                        variables[varDecl->name] = false;
+                    }
                 }
-                doubleVariables[varDecl->name] = value;
-            } else if (varDecl->type == "str") {
-                std::string value;
-                if (varDecl->initializer) {
-                    value = evaluateString(varDecl->initializer.get());
-                }
-                strVariables[varDecl->name] = value;
-            } else if (varDecl->type == "bool") {
-                bool value = false;
-                if (varDecl->initializer) {
-                    value = evaluate(varDecl->initializer.get()) != 0;
-                }
-                boolVariables[varDecl->name] = value;
             }
         } else if (auto funcDecl = dynamic_cast<const FunctionDeclaration*>(statement)) {
-            functions[funcDecl->name] = [this, funcDecl](const std::vector<int>& args) -> int {
-                std::unordered_map<std::string, int> oldIntVars = intVariables;
-                for (size_t i = 0; i < funcDecl->parameters.size(); ++i) {
-                    intVariables[funcDecl->parameters[i]] = args[i];
-                }
-                for (const auto& stmt : funcDecl->body) {
-                    if (auto retStmt = dynamic_cast<ReturnStatement*>(stmt.get())) {
-                        int result = evaluate(retStmt->expression.get());
-                        intVariables = oldIntVars;
-                        return result;
-                    }
-                    execute(stmt.get());
-                }
-                intVariables = oldIntVars;
-                return 0; // Default return value if no return statement is found
-            };
+            // Handle function declarations
         } else if (auto ifStmt = dynamic_cast<const IfStatement*>(statement)) {
             if (evaluate(ifStmt->condition.get())) {
                 execute(ifStmt->thenBranch.get());
@@ -121,7 +144,24 @@ private:
         if (auto numberExpr = dynamic_cast<const NumberExpression*>(expr)) {
             return static_cast<int>(numberExpr->value);
         } else if (auto varExpr = dynamic_cast<const VariableExpression*>(expr)) {
-            return intVariables[varExpr->name];
+            if (variables.find(varExpr->name) != variables.end()) {
+                auto value = variables[varExpr->name];
+                if (std::holds_alternative<int>(value)) {
+                    return std::get<int>(value);
+                } else if (std::holds_alternative<double>(value)) {
+                    return static_cast<int>(std::get<double>(value));
+                } else if (std::holds_alternative<std::string>(value)) {
+                    try {
+                        return std::stoi(std::get<std::string>(value));
+                    } catch (const std::invalid_argument&) {
+                        throw std::runtime_error("Cannot convert string to int: " + std::get<std::string>(value));
+                    }
+                } else if (std::holds_alternative<bool>(value)) {
+                    return std::get<bool>(value) ? 1 : 0;
+                }
+            } else {
+                throw std::runtime_error("Undefined variable: " + varExpr->name);
+            }
         } else if (auto binExpr = dynamic_cast<const BinaryExpression*>(expr)) {
             int left = evaluate(binExpr->left.get());
             int right = evaluate(binExpr->right.get());
@@ -155,58 +195,104 @@ private:
             for (const auto& arg : funcCallExpr->arguments) {
                 args.push_back(evaluate(arg.get()));
             }
-            return functions[funcCallExpr->functionName](args);
+            // Handle function calls
         } else if (auto readExpr = dynamic_cast<const ReadExpression*>(expr)) {
             std::string input;
-            std::cin >> input;
-            return std::stoi(input);
+            std::getline(std::cin, input);
+            if (isNumber(input)) {
+                return std::stoi(input);
+            } else {
+                throw std::runtime_error("Invalid input for integer conversion");
+            }
         }
         return 0; // Default return for unknown expressions
+    }
+
+    double evaluateDouble(const Expression* expr) {
+        if (auto numberExpr = dynamic_cast<const NumberExpression*>(expr)) {
+            return numberExpr->value;
+        } else if (auto varExpr = dynamic_cast<const VariableExpression*>(expr)) {
+            if (variables.find(varExpr->name) != variables.end()) {
+                auto value = variables[varExpr->name];
+                if (std::holds_alternative<double>(value)) {
+                    return std::get<double>(value);
+                } else if (std::holds_alternative<int>(value)) {
+                    return static_cast<double>(std::get<int>(value));
+                } else if (std::holds_alternative<std::string>(value)) {
+                    try {
+                        return std::stod(std::get<std::string>(value));
+                    } catch (const std::invalid_argument&) {
+                        throw std::runtime_error("Cannot convert string to double: " + std::get<std::string>(value));
+                    }
+                } else if (std::holds_alternative<bool>(value)) {
+                    return std::get<bool>(value) ? 1.0 : 0.0;
+                }
+            } else {
+                throw std::runtime_error("Undefined variable: " + varExpr->name);
+            }
+        } else if (auto binExpr = dynamic_cast<const BinaryExpression*>(expr)) {
+            double left = evaluateDouble(binExpr->left.get());
+            double right = evaluateDouble(binExpr->right.get());
+            if (binExpr->op == "+") {
+                return left + right;
+            } else if (binExpr->op == "-") {
+                return left - right;
+            } else if (binExpr->op == "*") {
+                return left * right;
+            } else if (binExpr->op == "/") {
+                return left / right;
+            } else if (binExpr->op == "<") {
+                return left < right;
+            } else if (binExpr->op == ">") {
+                return left > right;
+            } else if (binExpr->op == "<=") {
+                return left <= right;
+            } else if (binExpr->op == ">=") {
+                return left >= right;
+            } else if (binExpr->op == "==") {
+                return left == right;
+            } else if (binExpr->op == "!=") {
+                return left != right;
+            } else if (binExpr->op == "**") {
+                return std::pow(left, right);
+            } else if (binExpr->op == "*/") {
+                return std::sqrt(left);
+            }
+        }
+        return 0.0; // Default return for unknown expressions
     }
 
     std::string evaluateString(const Expression* expr) {
         if (auto strExpr = dynamic_cast<const StringExpression*>(expr)) {
             return strExpr->value;
         } else if (auto varExpr = dynamic_cast<const VariableExpression*>(expr)) {
-            return strVariables[varExpr->name];
+            if (variables.find(varExpr->name) != variables.end()) {
+                return std::get<std::string>(variables[varExpr->name]);
+            } else {
+                throw std::runtime_error("Undefined variable: " + varExpr->name);
+            }
         }
         return ""; // Default return for unknown expressions
     }
-};
 
-int main(int argc, char* argv[]) {
-    if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <file_name.foxl>" << std::endl;
-        return 1;
+    bool isNumber(const std::string& s) {
+        return !s.empty() && std::find_if(s.begin(), s.end(), [](unsigned char c) { return !std::isdigit(c); }) == s.end();
     }
 
-    std::ifstream file(argv[1]);
-    if (!file) {
-        std::cerr << "Error: Could not open file " << argv[1] << std::endl;
-        return 1;
+    template <typename T>
+    static void printValue(const T& value) {
+        std::cout << value << std::endl;
     }
 
-    std::string input((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-    file.close();
-
-    Lexer lexer(input);
-    Parser parser(lexer);
-
-    try {
-        std::vector<std::unique_ptr<Statement>> statements;
-        while (auto ast = parser.parse()) {
-            if (auto stmt = dynamic_cast<Statement*>(ast.get())) {
-                statements.push_back(std::unique_ptr<Statement>(stmt));
-                ast.release();
+    template <typename T>
+    static void printValue(const std::vector<T>& vec) {
+        std::cout << "[";
+        for (size_t i = 0; i < vec.size(); ++i) {
+            std::cout << vec[i];
+            if (i < vec.size() - 1) {
+                std::cout << ", ";
             }
         }
-
-        Interpreter interpreter;
-        interpreter.interpret(statements);
-    } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
-        return 1;
+        std::cout << "]" << std::endl;
     }
-
-    return 0;
-}
+};

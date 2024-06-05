@@ -1,4 +1,3 @@
-#include "lexer.cpp"
 #include <memory>
 #include <vector>
 #include <iostream>
@@ -20,7 +19,7 @@ public:
     std::string message;
     bool isVariable;
 
-    explicit WriteStatement(std::string message, bool isVariable = false) 
+    explicit WriteStatement(std::string message, bool isVariable = false)
         : message(std::move(message)), isVariable(isVariable) {}
 
     void print() const override {
@@ -276,7 +275,7 @@ private:
         if (currentToken.type == TokenType::EndOfFile) {
             return nullptr; // Handle end of file
         }
-        
+
         if (currentToken.type == TokenType::Keyword) {
             if (currentToken.value == "write") {
                 return parseWriteStatement();
@@ -285,11 +284,14 @@ private:
             } else if (currentToken.value == "if") {
                 return parseIfStatement();
             } else if (currentToken.value == "return") {
+               
                 return parseReturnStatement();
             } else if (currentToken.value == "for") {
                 return parseForStatement();
             } else if (currentToken.value == "include") {
                 return parseIncludeStatement();
+            } else if (currentToken.value == "let") {
+                return parseLetDeclaration();
             } else {
                 return parseVariableDeclaration();
             }
@@ -329,10 +331,9 @@ private:
         }
         advance(); // consume ')'
 
-        if (currentToken.value != ";") {
-            throw std::runtime_error("Expected ';' after write statement");
+        if (currentToken.value == ";") {
+            advance(); // consume optional ';'
         }
-        advance(); // consume ';'
 
         return std::make_unique<WriteStatement>(message, isVariable);
     }
@@ -353,12 +354,33 @@ private:
             initializer = parseExpression();
         }
 
-        if (currentToken.value != ";") {
-            throw std::runtime_error("Expected ';' after variable declaration");
+        if (currentToken.value == ";") {
+            advance(); // consume optional ';'
         }
-        advance(); // consume ';'
 
         return std::make_unique<VariableDeclaration>(type, name, std::move(initializer));
+    }
+
+    std::unique_ptr<ASTNode> parseLetDeclaration() {
+        advance(); // consume 'let'
+
+        if (currentToken.type != TokenType::Identifier) {
+            throw std::runtime_error("Expected variable name in let declaration");
+        }
+        std::string name = currentToken.value;
+        advance(); // consume variable name
+
+        std::unique_ptr<Expression> initializer;
+        if (currentToken.value == "=") {
+            advance(); // consume '='
+            initializer = parseExpression();
+        }
+
+        if (currentToken.value == ";") {
+            advance(); // consume optional ';'
+        }
+
+        return std::make_unique<VariableDeclaration>("auto", name, std::move(initializer));
     }
 
     std::unique_ptr<Expression> parseExpression() {
@@ -437,13 +459,7 @@ private:
                 }
             }
             advance(); // consume ']'
-            if (currentToken.type == TokenType::Symbol && currentToken.value == "]") {
-                // It's a list
-                return std::make_unique<ListExpression>(std::move(elements));
-            } else {
-                // It's an array
-                return std::make_unique<ArrayExpression>(std::move(elements));
-            }
+            return std::make_unique<ArrayExpression>(std::move(elements));
         }
 
         if (currentToken.type == TokenType::Keyword && currentToken.value == "read") {
@@ -503,11 +519,6 @@ private:
         }
         advance(); // consume '}'
 
-        // Allow optional semicolon after function body
-        if (currentToken.value == ";") {
-            advance(); // consume optional ';'
-        }
-
         return std::make_unique<FunctionDeclaration>(name, std::move(parameters), std::move(body));
     }
 
@@ -542,10 +553,9 @@ private:
 
         auto expression = parseExpression();
 
-        if (currentToken.value != ";") {
-            throw std::runtime_error("Expected ';' after return statement");
+        if (currentToken.value == ";") {
+            advance(); // consume optional ';'
         }
-        advance(); // consume ';'
 
         return std::make_unique<ReturnStatement>(std::move(expression));
     }
@@ -562,11 +572,6 @@ private:
             statements.push_back(castToStatement(parseStatement()));
         }
         advance(); // consume '}'
-
-        // Allow optional semicolon after block
-        if (currentToken.value == ";") {
-            advance(); // consume optional ';'
-        }
 
         return std::make_unique<BlockStatement>(std::move(statements));
     }
@@ -622,10 +627,9 @@ private:
         std::string fileName = currentToken.value;
         advance(); // consume string literal
 
-        if (currentToken.value != ";") {
-            throw std::runtime_error("Expected ';' after include statement");
+        if (currentToken.value == ";") {
+            advance(); // consume optional ';'
         }
-        advance(); // consume ';'
 
         return std::make_unique<IncludeStatement>(fileName);
     }
