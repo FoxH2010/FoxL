@@ -9,7 +9,7 @@ After that, if you're on Windows, you're going use the command prompt like the f
 ```bat
 <foxl_interpreter_path> <your_file>.foxl
 ```
-And if you're wondering, where's the other operating system? Well, FoxL didn't support other operating system untill we drop it's first release.
+And if you're wondering, where's the other operating systems? Well, FoxL didn't support other operating system untill we drop it's first release.
 ## Credit  
 Programmer - FoxH  
 Idea - FoxH  
