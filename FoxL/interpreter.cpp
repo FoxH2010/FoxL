@@ -43,7 +43,7 @@ private:
                         if (!arrayExpr->elements.empty() && dynamic_cast<NumberExpression*>(arrayExpr->elements[0].get())) {
                             std::vector<int> arrayValues;
                             for (const auto& elem : arrayExpr->elements) {
-                                arrayValues.push_back(evaluate(elem.get()));
+                                arrayValues.push_back(evaluateInt(elem.get()));
                             }
                             variables[varDecl->name] = arrayValues;
                         } else if (!arrayExpr->elements.empty() && dynamic_cast<StringExpression*>(arrayExpr->elements[0].get())) {
@@ -72,13 +72,13 @@ private:
             } else {
                 if (varDecl->initializer) {
                     if (varDecl->type == "int") {
-                        variables[varDecl->name] = evaluate(varDecl->initializer.get());
+                        variables[varDecl->name] = evaluateInt(varDecl->initializer.get());
                     } else if (varDecl->type == "double") {
                         variables[varDecl->name] = evaluateDouble(varDecl->initializer.get());
                     } else if (varDecl->type == "str") {
                         variables[varDecl->name] = evaluateString(varDecl->initializer.get());
                     } else if (varDecl->type == "bool") {
-                        variables[varDecl->name] = evaluate(varDecl->initializer.get()) != 0;
+                        variables[varDecl->name] = evaluateInt(varDecl->initializer.get()) != 0;
                     }
                 } else {
                     if (varDecl->type == "int") {
@@ -95,19 +95,19 @@ private:
         } else if (auto funcDecl = dynamic_cast<const FunctionDeclaration*>(statement)) {
             // Handle function declarations
         } else if (auto ifStmt = dynamic_cast<const IfStatement*>(statement)) {
-            if (evaluate(ifStmt->condition.get())) {
+            if (evaluateInt(ifStmt->condition.get())) {
                 execute(ifStmt->thenBranch.get());
             } else if (ifStmt->elseBranch) {
                 execute(ifStmt->elseBranch.get());
             }
         } else if (auto forStmt = dynamic_cast<const ForStatement*>(statement)) {
             execute(forStmt->initializer.get());
-            while (evaluate(forStmt->condition.get())) {
+            while (evaluateInt(forStmt->condition.get())) {
                 execute(forStmt->body.get());
                 execute(forStmt->increment.get());
             }
         } else if (auto returnStmt = dynamic_cast<const ReturnStatement*>(statement)) {
-            evaluate(returnStmt->expression.get());
+            evaluateInt(returnStmt->expression.get());
         } else if (auto blockStmt = dynamic_cast<const BlockStatement*>(statement)) {
             for (const auto& stmt : blockStmt->statements) {
                 execute(stmt.get());
@@ -140,7 +140,7 @@ private:
         }
     }
 
-    int evaluate(const Expression* expr) {
+    int evaluateInt(const Expression* expr) {
         if (auto numberExpr = dynamic_cast<const NumberExpression*>(expr)) {
             return static_cast<int>(numberExpr->value);
         } else if (auto varExpr = dynamic_cast<const VariableExpression*>(expr)) {
@@ -163,8 +163,8 @@ private:
                 throw std::runtime_error("Undefined variable: " + varExpr->name);
             }
         } else if (auto binExpr = dynamic_cast<const BinaryExpression*>(expr)) {
-            int left = evaluate(binExpr->left.get());
-            int right = evaluate(binExpr->right.get());
+            int left = evaluateInt(binExpr->left.get());
+            int right = evaluateInt(binExpr->right.get());
             if (binExpr->op == "+") {
                 return left + right;
             } else if (binExpr->op == "-") {
@@ -193,7 +193,7 @@ private:
         } else if (auto funcCallExpr = dynamic_cast<const FunctionCallExpression*>(expr)) {
             std::vector<int> args;
             for (const auto& arg : funcCallExpr->arguments) {
-                args.push_back(evaluate(arg.get()));
+                args.push_back(evaluateInt(arg.get()));
             }
             // Handle function calls
         } else if (auto readExpr = dynamic_cast<const ReadExpression*>(expr)) {

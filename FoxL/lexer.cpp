@@ -40,7 +40,7 @@ public:
                 continue;
             }
 
-            if (isalpha(currentChar)) {
+            if (isalpha(currentChar) || (currentChar & 0x80)) {
                 return lexIdentifierOrKeyword();
             }
 
@@ -81,7 +81,7 @@ private:
 
     Token lexIdentifierOrKeyword() {
         size_t start = position;
-        while (position < source.size() && (isalnum(source[position]) || source[position] == '_')) {
+        while (position < source.size() && (isalnum(source[position]) || source[position] == '_' || (source[position] & 0x80))) {
             ++position;
         }
         std::string value = source.substr(start, position - start);
