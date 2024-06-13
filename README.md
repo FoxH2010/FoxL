@@ -1,5 +1,5 @@
 # FoxL
-Sharp Fox's Programming Language Project.  
+FoxH Programming Language Project.  
 ## Description  
 This programming language (FoxL) was created, expect to be a high-level prgramming language that's ease to use for web-developer. Might release the next year.  
 FoxL is for program developing, rather than web. But I hopes you'll find it suit yourself.
