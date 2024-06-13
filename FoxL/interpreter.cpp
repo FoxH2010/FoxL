@@ -13,6 +13,26 @@
 #include <iterator>
 #include <type_traits>
 
+// Forward declarations of AST classes
+class Statement;
+class Expression;
+class WriteStatement;
+class VariableDeclaration;
+class IfStatement;
+class ForStatement;
+class ReturnStatement;
+class BlockStatement;
+class IncludeStatement;
+class NumberExpression;
+class StringExpression;
+class BoolExpression;
+class ArrayExpression;
+class VariableExpression;
+class BinaryExpression;
+class FunctionCallExpression;
+class ReadExpression;
+class IndexExpression;
+
 class Interpreter {
 public:
     void interpret(const std::vector<std::unique_ptr<Statement>>& statements) {
@@ -26,16 +46,8 @@ private:
 
     void execute(const Statement* statement) {
         if (const auto* writeStmt = dynamic_cast<const WriteStatement*>(statement)) {
-            if (writeStmt->isVariable) {
-                if (variables.find(writeStmt->message) != variables.end()) {
-                    const auto& value = variables[writeStmt->message];
-                    std::visit([](auto&& arg) { printValue(arg); }, value);
-                } else {
-                    throw std::runtime_error("Undefined variable: " + writeStmt->message);
-                }
-            } else {
-                std::cout << writeStmt->message << std::endl;
-            }
+            auto value = evaluate(writeStmt->messageExpr.get());
+            std::visit([](auto&& arg) { printValue(arg); }, value);
         } else if (const auto* varDecl = dynamic_cast<const VariableDeclaration*>(statement)) {
             if (varDecl->type == "auto") {
                 if (varDecl->initializer) {
@@ -194,10 +206,13 @@ private:
                     throw std::runtime_error("Unsupported operand types for '>='.");
                 }
             } else {
-                throw std::runtime_error("Unsupported binary operator.");
+                throw std::runtime_error("Unsupported binary operator: " + binExpr->op);
             }
         } else if (const auto* readExpr = dynamic_cast<const ReadExpression*>(expr)) {
             std::string prompt = "Enter value: ";
+            if (readExpr->prompt) {
+                prompt = std::get<std::string>(evaluate(readExpr->prompt.get()));
+            }
             std::cout << prompt;
             std::string input;
             std::getline(std::cin, input);
@@ -208,8 +223,36 @@ private:
             } else {
                 return input;
             }
+        } else if (const auto* indexExpr = dynamic_cast<const IndexExpression*>(expr)) {
+            auto arrayVar = evaluate(indexExpr->array.get());
+            auto index = std::get<int>(evaluate(indexExpr->index.get()));
+
+            if (std::holds_alternative<std::vector<int>>(arrayVar)) {
+                const auto& array = std::get<std::vector<int>>(arrayVar);
+                if (index >= 0 && index < array.size()) {
+                    return array[index];
+                } else {
+                    throw std::runtime_error("Index out of bounds");
+                }
+            } else if (std::holds_alternative<std::vector<std::string>>(arrayVar)) {
+                const auto& array = std::get<std::vector<std::string>>(arrayVar);
+                if (index >= 0 && index < array.size()) {
+                    return array[index];
+                } else {
+                    throw std::runtime_error("Index out of bounds");
+                }
+            } else {
+                throw std::runtime_error("Variable is not an array");
+            }
+        } else {
+            std::stringstream ss;
+            ss << "Unsupported expression type: " << typeid(*expr).name();
+            throw std::runtime_error(ss.str());
         }
-        throw std::runtime_error("Unsupported expression type.");
+
+        std::stringstream ss;
+        ss << "Unsupported expression type: " << typeid(*expr).name();
+        throw std::runtime_error(ss.str());
     }
 
     bool isNumber(const std::string& s) {

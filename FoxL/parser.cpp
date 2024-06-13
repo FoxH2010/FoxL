@@ -11,26 +11,54 @@ public:
 class Expression : public ASTNode {
 };
 
+class IndexExpression : public Expression {
+public:
+    std::unique_ptr<Expression> array;
+    std::unique_ptr<Expression> index;
+
+    IndexExpression(std::unique_ptr<Expression> array, std::unique_ptr<Expression> index)
+        : array(std::move(array)), index(std::move(index)) {}
+
+    void print() const override {
+        std::cout << "IndexExpression(";
+        array->print();
+        std::cout << ", ";
+        index->print();
+        std::cout << ")" << std::endl;
+    }
+};
+
 class Statement : public ASTNode {
 };
 
 class WriteStatement : public Statement {
 public:
-    std::string message;
+    std::unique_ptr<Expression> messageExpr;
     bool isVariable;
 
-    explicit WriteStatement(std::string message, bool isVariable = false)
-        : message(std::move(message)), isVariable(isVariable) {}
+    explicit WriteStatement(std::unique_ptr<Expression> messageExpr)
+        : messageExpr(std::move(messageExpr)), isVariable(false) {}
 
     void print() const override {
-        std::cout << "WriteStatement(" << message << ", " << (isVariable ? "variable" : "literal") << ")" << std::endl;
+        std::cout << "WriteStatement(";
+        messageExpr->print();
+        std::cout << ")" << std::endl;
     }
 };
 
 class ReadExpression : public Expression {
 public:
+    std::unique_ptr<Expression> prompt;
+
+    ReadExpression(std::unique_ptr<Expression> prompt = nullptr)
+        : prompt(std::move(prompt)) {}
+
     void print() const override {
-        std::cout << "ReadExpression()" << std::endl;
+        std::cout << "ReadExpression(";
+        if (prompt) {
+            prompt->print();
+        }
+        std::cout << ")" << std::endl;
     }
 };
 
@@ -313,18 +341,7 @@ private:
         }
         advance(); // consume '('
 
-        std::string message;
-        bool isVariable = false;
-        if (currentToken.type == TokenType::StringLiteral) {
-            message = currentToken.value;
-            advance(); // consume message
-        } else if (currentToken.type == TokenType::Identifier) {
-            message = currentToken.value;
-            isVariable = true;
-            advance(); // consume variable
-        } else {
-            throw std::runtime_error("Expected message or variable in write statement");
-        }
+        auto messageExpr = parseExpression();
 
         if (currentToken.value != ")") {
             throw std::runtime_error("Expected ')' after message or variable");
@@ -335,7 +352,7 @@ private:
             advance(); // consume optional ';'
         }
 
-        return std::make_unique<WriteStatement>(message, isVariable);
+        return std::make_unique<WriteStatement>(std::move(messageExpr));
     }
 
     std::unique_ptr<ASTNode> parseVariableDeclaration() {
@@ -407,8 +424,18 @@ private:
             std::string name = currentToken.value;
             advance(); // consume identifier
 
+            if (currentToken.type == TokenType::Symbol && currentToken.value == "[") {
+                advance(); // consume '['
+                auto indexExpr = parseExpression();
+                if (currentToken.value != "]") {
+                    throw std::runtime_error("Expected ']' after index");
+                }
+                advance(); // consume ']'
+                return std::make_unique<IndexExpression>(std::make_unique<VariableExpression>(name), std::move(indexExpr));
+            }
+
             if (currentToken.type == TokenType::Symbol && currentToken.value == "(") {
-                // Function call
+                // Function call parsing
                 advance(); // consume '('
                 std::vector<std::unique_ptr<Expression>> arguments;
                 while (currentToken.type != TokenType::Symbol || currentToken.value != ")") {
@@ -445,7 +472,7 @@ private:
         }
 
         if (currentToken.type == TokenType::Symbol && currentToken.value == "[") {
-            // Array or list
+            // Array or list parsing
             advance(); // consume '['
             std::vector<std::unique_ptr<Expression>> elements;
             while (currentToken.type != TokenType::Symbol || currentToken.value != "]") {
@@ -468,11 +495,15 @@ private:
                 throw std::runtime_error("Expected '(' after 'read'");
             }
             advance(); // consume '('
+            std::unique_ptr<Expression> prompt = nullptr;
+            if (currentToken.type != TokenType::Symbol || currentToken.value != ")") {
+                prompt = parseExpression();
+            }
             if (currentToken.value != ")") {
-                throw std::runtime_error("Expected ')' after 'read'");
+                throw std::runtime_error("Expected ')' after 'read' argument");
             }
             advance(); // consume ')'
-            return std::make_unique<ReadExpression>();
+            return std::make_unique<ReadExpression>(std::move(prompt));
         }
 
         throw std::runtime_error("Expected primary expression");
