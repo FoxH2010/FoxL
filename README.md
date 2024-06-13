@@ -9,7 +9,15 @@ After that, if you're on Windows, you're going use the command prompt like the f
 ```bat
 <foxl_interpreter_path> <your_file>.foxl
 ```
-And if you're wondering, where's the other operating systems? Well, FoxL didn't support other operating system untill we drop it's first release.
+And as if you're wondering, where's the other operating systems? Well, FoxL didn't support other operating system untill we drop it's first release.
+## Introduce  
+Here's a simple program written in FoxL to show you how it works:  
+```foxl
+write("Hello, world!");
+```
+Yeah, it's just that, you could figure the rest out yourself.  
+## Syntax highlighting
+Forunately, there's a FoxL syntax highlighter available on the Visual Studio Code Extension Marketplace. You'll need it if you really want to code using FoxL  
 ## Credit  
 Programmer - FoxH  
 Idea - FoxH  
