@@ -17,7 +17,7 @@ write("Hello, world!");
 ```
 Yeah, it's just that, you could figure the rest out yourself.  
 ## Syntax highlighting
-Forunately, there's a FoxL syntax highlighter available on the Visual Studio Code Extension Marketplace. You'll need it if you really want to code using FoxL  
+Fortunately, there's a FoxL syntax highlighter available on the Visual Studio Code Extension Marketplace. You'll need it if you really want to code using FoxL  
 ## Credit  
 Programmer - FoxH  
 Idea - FoxH  
