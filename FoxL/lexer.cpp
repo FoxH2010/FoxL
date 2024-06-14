@@ -18,19 +18,23 @@ enum class TokenType {
 struct Token {
     TokenType type;
     std::string value;
+    int line;
 
-    Token(TokenType type, std::string value) : type(type), value(std::move(value)) {}
+    Token(TokenType type, std::string value, int line) : type(type), value(std::move(value)), line(line) {}
 };
 
 class Lexer {
 public:
-    explicit Lexer(const std::string &source) : source(source), position(0) {}
+    explicit Lexer(const std::string &source) : source(source), position(0), line(1) {}
 
     Token getNextToken() {
         while (position < source.size()) {
             char currentChar = source[position];
 
             if (isspace(currentChar)) {
+                if (currentChar == '\n') {
+                    ++line;
+                }
                 ++position;
                 continue;
             }
@@ -60,21 +64,23 @@ public:
                 return lexStringLiteral(currentChar);
             }
 
-            return Token(TokenType::Unknown, std::string(1, currentChar));
+            return Token(TokenType::Unknown, std::string(1, currentChar), line);
         }
 
-        return Token(TokenType::EndOfFile, "");
+        return Token(TokenType::EndOfFile, "", line);
     }
 
 private:
     std::string source;
     size_t position;
+    int line;
 
     void skipSingleLineComment() {
         while (position < source.size() && source[position] != '\n') {
             ++position;
         }
         if (position < source.size() && source[position] == '\n') {
+            ++line;
             ++position;
         }
     }
@@ -87,10 +93,10 @@ private:
         std::string value = source.substr(start, position - start);
 
         if (isKeyword(value)) {
-            return Token(TokenType::Keyword, value);
+            return Token(TokenType::Keyword, value, line);
         }
 
-        return Token(TokenType::Identifier, value);
+        return Token(TokenType::Identifier, value, line);
     }
 
     Token lexNumber() {
@@ -100,7 +106,7 @@ private:
             if (source[position] == '.') hasDot = true;
             ++position;
         }
-        return Token(TokenType::Number, source.substr(start, position - start));
+        return Token(TokenType::Number, source.substr(start, position - start), line);
     }
 
     Token lexOperator() {
@@ -110,20 +116,20 @@ private:
         if ((currentChar == '!' || currentChar == '=' || currentChar == '<' || currentChar == '>') &&
             position + 1 < source.size() && source[position + 1] == '=') {
             position += 2;
-            return Token(TokenType::Operator, source.substr(start, 2));
+            return Token(TokenType::Operator, source.substr(start, 2), line);
         }
 
         if ((currentChar == '+' || currentChar == '-' || currentChar == '*' || currentChar == '/') &&
             position + 1 < source.size() && source[position + 1] == currentChar) {
             position += 2;
-            return Token(TokenType::Operator, source.substr(start, 2));
+            return Token(TokenType::Operator, source.substr(start, 2), line);
         }
 
-        return Token(TokenType::Operator, std::string(1, source[position++]));
+        return Token(TokenType::Operator, std::string(1, source[position++]), line);
     }
 
     Token lexSymbol() {
-        return Token(TokenType::Symbol, std::string(1, source[position++]));
+        return Token(TokenType::Symbol, std::string(1, source[position++]), line);
     }
 
     Token lexStringLiteral(char quoteType) {
@@ -152,7 +158,7 @@ private:
         }
 
         ++position; // consume the closing quote
-        return Token(TokenType::StringLiteral, value);
+        return Token(TokenType::StringLiteral, value, line);
     }
 
     bool isKeyword(const std::string &str) const {

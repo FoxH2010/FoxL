@@ -1,16 +1,43 @@
 #include "lexer.cpp"
 #include "parser.cpp"
 #include "interpreter.cpp"
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <vector>
+#include <memory>
+
+const std::string VERSION = "0.0.2";
+
+void displayUsage(const char* programName) {
+    std::cout << "Usage: " << programName << " <file_name.foxl>\n";
+    std::cout << "Options:\n";
+    std::cout << "  --help      Display this help message\n";
+    std::cout << "  --version   Display the version information\n";
+}
+
+void displayVersion() {
+    std::cout << "FoxL Interpreter version: " << VERSION << std::endl;
+}
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <file_name.foxl>" << std::endl;
+        displayUsage(argv[0]);
         return 1;
     }
 
-    std::ifstream file(argv[1]);
+    std::string arg1 = argv[1];
+    if (arg1 == "--help") {
+        displayUsage(argv[0]);
+        return 0;
+    } else if (arg1 == "--version") {
+        displayVersion();
+        return 0;
+    }
+
+    std::ifstream file(arg1);
     if (!file) {
-        std::cerr << "Error: Could not open file " << argv[1] << std::endl;
+        std::cerr << "Error: Could not open file " << arg1 << std::endl;
         return 1;
     }
 
