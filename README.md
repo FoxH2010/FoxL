@@ -1,6 +1,10 @@
 # FoxL
 FoxH's Programming Language Project.  
-!CodeFactor
+
+[![cf-image][]][cf-site]
+
+[cf-site]: https://www.codefactor.io/repository/github/foxh2010/foxl
+[cf-image]: https://www.codefactor.io/repository/github/foxh2010/foxl/badge
 ## Description  
 This programming language (FoxL) was created, expect to be a high-level prgramming language that's ease to use for web-developer. Might release the next year.  
 FoxL is for application developing, rather than web. But I hopes you'll find it suit yourself.
