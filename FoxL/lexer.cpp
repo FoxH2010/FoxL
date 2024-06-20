@@ -3,6 +3,7 @@
 #include <vector>
 #include <cctype>
 #include <fstream>
+#include <unordered_set>
 
 enum class TokenType {
     Keyword,
@@ -25,6 +26,8 @@ struct Token {
 
 class Lexer {
 public:
+    size_t position;
+    int line;
     explicit Lexer(const std::string &source) : source(source), position(0), line(1) {}
 
     Token getNextToken() {
@@ -64,16 +67,19 @@ public:
                 return lexStringLiteral(currentChar);
             }
 
-            return Token(TokenType::Unknown, std::string(1, currentChar), line);
+            throw std::runtime_error("Unknown keyword at line " + std::to_string(line));
         }
 
         return Token(TokenType::EndOfFile, "", line);
     }
 
+    void registerIdentifier(const std::string &identifier) {
+        identifiers.insert(identifier);
+    }
+
 private:
     std::string source;
-    size_t position;
-    int line;
+    std::unordered_set<std::string> identifiers;
 
     void skipSingleLineComment() {
         while (position < source.size() && source[position] != '\n') {
@@ -94,6 +100,10 @@ private:
 
         if (isKeyword(value)) {
             return Token(TokenType::Keyword, value, line);
+        }
+
+        if (identifiers.find(value) != identifiers.end()) {
+            return Token(TokenType::Identifier, value, line);
         }
 
         return Token(TokenType::Identifier, value, line);
@@ -121,6 +131,11 @@ private:
 
         if ((currentChar == '+' || currentChar == '-' || currentChar == '*' || currentChar == '/') &&
             position + 1 < source.size() && source[position + 1] == currentChar) {
+            position += 2;
+            return Token(TokenType::Operator, source.substr(start, 2), line);
+        }
+
+        if ((currentChar == '+' && source[position + 1] == '+') || (currentChar == '-' && source[position + 1] == '-')) {
             position += 2;
             return Token(TokenType::Operator, source.substr(start, 2), line);
         }
@@ -163,7 +178,7 @@ private:
 
     bool isKeyword(const std::string &str) const {
         static const std::vector<std::string> keywords = {
-            "if", "else", "while", "return", "int", "float", "char", "write", "read", "func", "for", "str", "bool", "double", "include", "let"
+            "if", "else", "while", "return", "write", "read", "func", "for", "include", "let", "const"
         };
 
         for (const auto &keyword : keywords) {

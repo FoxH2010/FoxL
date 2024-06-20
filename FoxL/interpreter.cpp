@@ -31,7 +31,11 @@ public:
     }
 
 private:
-    using Variable = std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>;
+    struct Variable {
+        std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> value;
+        bool isConstant;
+    };
+
     using Function = std::pair<std::vector<std::string>, std::vector<std::unique_ptr<Statement>>>;
 
     std::unordered_map<std::string, Variable> variables;
@@ -43,26 +47,28 @@ private:
                 auto value = evaluate(writeStmt->messageExpr.get());
                 std::visit([](auto&& arg) { printValue(arg); }, value);
             } else if (const auto* varDecl = dynamic_cast<const VariableDeclaration*>(statement)) {
-                if (varDecl->type == "auto") {
-                    if (varDecl->initializer) {
-                        variables[varDecl->name] = evaluate(varDecl->initializer.get());
-                    } else {
-                        throw std::runtime_error("Variable '" + varDecl->name + "' has no initializer");
-                    }
+                if (variables.find(varDecl->name) != variables.end() && variables[varDecl->name].isConstant) {
+                    throw std::runtime_error("Cannot reassign constant variable: " + varDecl->name);
+                }
+
+                if (varDecl->initializer) {
+                    variables[varDecl->name] = { evaluate(varDecl->initializer.get()), varDecl->type == "const" };
                 } else {
-                    if (varDecl->initializer) {
-                        variables[varDecl->name] = evaluate(varDecl->initializer.get());
-                    } else {
-                        if (varDecl->type == "int") {
-                            variables[varDecl->name] = 0;
-                        } else if (varDecl->type == "double") {
-                            variables[varDecl->name] = 0.0;
-                        } else if (varDecl->type == "str") {
-                            variables[varDecl->name] = std::string("");
-                        } else if (varDecl->type == "bool") {
-                            variables[varDecl->name] = false;
-                        }
+                    if (varDecl->type == "int") {
+                        variables[varDecl->name] = { 0, varDecl->type == "const" };
+                    } else if (varDecl->type == "double") {
+                        variables[varDecl->name] = { 0.0, varDecl->type == "const" };
+                    } else if (varDecl->type == "str") {
+                        variables[varDecl->name] = { std::string(""), varDecl->type == "const" };
+                    } else if (varDecl->type == "bool") {
+                        variables[varDecl->name] = { false, varDecl->type == "const" };
                     }
+                }
+            } else if (const auto* varExpr = dynamic_cast<const VariableExpression*>(statement)) {
+                if (variables.find(varExpr->name) != variables.end() && !variables[varExpr->name].isConstant) {
+                    variables[varExpr->name] = { evaluate(varExpr), false };
+                } else {
+                    throw std::runtime_error("Cannot reassign constant variable: " + varExpr->name);
                 }
             } else if (const auto* funcDecl = dynamic_cast<const FunctionDeclaration*>(statement)) {
                 functions[funcDecl->name] = { funcDecl->parameters, cloneStatements(funcDecl->body) };
@@ -132,7 +138,7 @@ private:
                 return boolExpr->value;
             } else if (const auto* varExpr = dynamic_cast<const VariableExpression*>(expr)) {
                 if (variables.find(varExpr->name) != variables.end()) {
-                    return variables[varExpr->name];
+                    return variables[varExpr->name].value;
                 } else {
                     throw std::runtime_error("Undefined variable: " + varExpr->name);
                 }
@@ -140,7 +146,49 @@ private:
                 auto left = evaluate(binExpr->left.get());
                 auto right = evaluate(binExpr->right.get());
 
-                if (binExpr->op == "+") {
+                if (binExpr->op == "=") {
+                    if (const auto* leftVar = dynamic_cast<const VariableExpression*>(binExpr->left.get())) {
+                        if (variables.find(leftVar->name) == variables.end()) {
+                            throw std::runtime_error("Undefined variable: " + leftVar->name);
+                        }
+                        if (variables[leftVar->name].isConstant) {
+                            throw std::runtime_error("Cannot assign to constant variable: " + leftVar->name);
+                        }
+                        auto rightValue = evaluate(binExpr->right.get());
+                        variables[leftVar->name].value = rightValue;
+                        return rightValue;
+                    } else if (const auto* indexExpr = dynamic_cast<const IndexExpression*>(binExpr->left.get())) {
+                        auto arrayVar = dynamic_cast<const VariableExpression*>(indexExpr->array.get());
+                        if (!arrayVar) {
+                            throw std::runtime_error("Array must be a variable.");
+                        }
+
+                        auto arrayValue = evaluate(arrayVar);
+                        auto index = std::get<int>(evaluate(indexExpr->index.get()));
+                        auto rightValue = evaluate(binExpr->right.get());
+
+                        if (std::holds_alternative<std::vector<int>>(arrayValue)) {
+                            auto& array = std::get<std::vector<int>>(variables[arrayVar->name].value);
+                            if (index >= 0 && index < array.size()) {
+                                array[index] = std::get<int>(rightValue);
+                            } else {
+                                throw std::runtime_error("Index out of bounds");
+                            }
+                        } else if (std::holds_alternative<std::vector<std::string>>(arrayValue)) {
+                            auto& array = std::get<std::vector<std::string>>(variables[arrayVar->name].value);
+                            if (index >= 0 && index < array.size()) {
+                                array[index] = std::get<std::string>(rightValue);
+                            } else {
+                                throw std::runtime_error("Index out of bounds");
+                            }
+                        } else {
+                            throw std::runtime_error("Variable is not an array");
+                        }
+                        return rightValue;
+                    } else {
+                        throw std::runtime_error("Unsupported left-hand side in assignment.");
+                    }
+                } else if (binExpr->op == "+") {
                     if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
                         return std::get<int>(left) + std::get<int>(right);
                     } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
@@ -289,7 +337,7 @@ private:
                 }
                 std::unordered_map<std::string, Variable> localVariables = variables;
                 for (size_t i = 0; i < parameters.size(); ++i) {
-                    localVariables[parameters[i]] = evaluate(funcCallExpr->arguments[i].get());
+                    localVariables[parameters[i]] = { evaluate(funcCallExpr->arguments[i].get()), false };
                 }
                 auto oldVariables = variables;
                 variables = localVariables;
@@ -303,10 +351,6 @@ private:
                 }
                 variables = oldVariables;
                 return 0; // Default return value if no return statement is encountered.
-            } else {
-                std::stringstream ss;
-                ss << "Unsupported expression type: " << typeid(*expr).name();
-                throw std::runtime_error(ss.str());
             }
         } catch (const std::exception& e) {
             throw std::runtime_error(std::string(e.what()) + " at line " + std::to_string(expr->line));

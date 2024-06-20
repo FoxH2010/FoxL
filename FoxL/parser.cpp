@@ -14,7 +14,11 @@ public:
 
 class Expression : public ASTNode {
 public:
+    std::string name;
     using ASTNode::ASTNode;
+
+    Expression(int line) : ASTNode(line), name("") {}
+    Expression(std::string name, int line) : ASTNode(line), name(std::move(name)) {}
 };
 
 class Statement : public ASTNode {
@@ -119,9 +123,7 @@ public:
 
 class VariableExpression : public Expression {
 public:
-    std::string name;
-
-    VariableExpression(std::string name, int line) : Expression(line), name(std::move(name)) {}
+    VariableExpression(std::string name, int line) : Expression(std::move(name), line) {}
 
     void print() const override {
         std::cout << "VariableExpression(" << name << ", line: " << line << ")" << std::endl;
@@ -141,6 +143,20 @@ public:
         std::cout << "BinaryExpression(" << op << ", line: " << line << ")" << std::endl;
         left->print();
         right->print();
+    }
+};
+
+class UnaryExpression : public Expression {
+public:
+    std::string op;
+    std::unique_ptr<Expression> operand;
+
+    UnaryExpression(std::string op, std::unique_ptr<Expression> operand, int line)
+        : Expression(line), op(std::move(op)), operand(std::move(operand)) {}
+
+    void print() const override {
+        std::cout << "UnaryExpression(" << op << ", line: " << line << ")" << std::endl;
+        operand->print();
     }
 };
 
@@ -281,7 +297,7 @@ public:
         : Statement(line), condition(std::move(condition)), thenBranch(std::move(thenBranch)), elseBranch(std::move(elseBranch)) {}
 
     void print() const override {
-        std::cout << "IfStatement, line" << line << std::endl;
+        std::cout << "IfStatement, line: " << line << std::endl;
         condition->print();
         thenBranch->print();
         if (elseBranch) {
@@ -312,7 +328,7 @@ private:
         }
 
         if (currentToken.type == TokenType::Keyword) {
-            if (currentToken.value == "write") {
+            if (currentToken.value == "write" && peekNextToken().value == "(") {
                 return parseWriteStatement();
             } else if (currentToken.value == "func") {
                 return parseFunctionDeclaration();
@@ -324,12 +340,12 @@ private:
                 return parseForStatement();
             } else if (currentToken.value == "while") {
                 return parseWhileStatement();
-            } else if (currentToken.value == "include") {
+            } else if (currentToken.value == "include" && peekNextToken().type == TokenType::StringLiteral) {
                 return parseIncludeStatement();
-            } else if (currentToken.value == "let") {
+            } else if (currentToken.value == "let" || currentToken.value == "const") {
                 return parseLetDeclaration();
             } else {
-                return parseVariableDeclaration();
+                throw std::runtime_error("Unexpected keyword: " + currentToken.value + " at line " + std::to_string(currentToken.line));
             }
         } else if (currentToken.type == TokenType::Identifier) {
             return parseExpressionStatement();
@@ -359,6 +375,8 @@ private:
 
         if (currentToken.value == ";") {
             advance(); // consume optional ';'
+        } else if (currentToken.value != "}" && currentToken.type != TokenType::EndOfFile) {
+            throw std::runtime_error("Expected ';' after 'write' statement at line " + std::to_string(line));
         }
 
         return std::make_unique<WriteStatement>(std::move(messageExpr), line);
@@ -375,6 +393,8 @@ private:
         std::string name = currentToken.value;
         advance(); // consume variable name
 
+        lexer.registerIdentifier(name); // Register the identifier in the lexer
+
         std::unique_ptr<Expression> initializer;
         if (currentToken.value == "=") {
             advance(); // consume '='
@@ -383,6 +403,8 @@ private:
 
         if (currentToken.value == ";") {
             advance(); // consume optional ';'
+        } else if (currentToken.value != "}" && currentToken.type != TokenType::EndOfFile) {
+            throw std::runtime_error("Expected ';' after variable declaration at line " + std::to_string(line));
         }
 
         return std::make_unique<VariableDeclaration>(type, name, std::move(initializer), line);
@@ -390,13 +412,15 @@ private:
 
     std::unique_ptr<ASTNode> parseLetDeclaration() {
         int line = currentToken.line;
-        advance(); // consume 'let'
+        advance(); // consume 'let' or 'const'
 
         if (currentToken.type != TokenType::Identifier) {
-            throw std::runtime_error("Expected variable name in let declaration at line " + std::to_string(line));
+            throw std::runtime_error("Expected variable name in let/const declaration at line " + std::to_string(line));
         }
         std::string name = currentToken.value;
         advance(); // consume variable name
+
+        lexer.registerIdentifier(name); // Register the identifier in the lexer
 
         std::unique_ptr<Expression> initializer;
         if (currentToken.value == "=") {
@@ -406,6 +430,8 @@ private:
 
         if (currentToken.value == ";") {
             advance(); // consume optional ';'
+        } else if (currentToken.value != "}" && currentToken.type != TokenType::EndOfFile) {
+            throw std::runtime_error("Expected ';' after let/const declaration at line " + std::to_string(line));
         }
 
         return std::make_unique<VariableDeclaration>("auto", name, std::move(initializer), line);
@@ -416,6 +442,10 @@ private:
 
         while (currentToken.type == TokenType::Operator) {
             std::string op = currentToken.value;
+            if (op == "++" || op == "--") {
+                advance(); // consume operator
+                return std::make_unique<UnaryExpression>(op, std::move(left), currentToken.line);
+            }
             advance(); // consume operator
             auto right = parsePrimary();
             left = std::make_unique<BinaryExpression>(std::move(left), op, std::move(right), currentToken.line);
@@ -474,14 +504,10 @@ private:
             return std::make_unique<StringExpression>(value, line);
         }
 
-        if (currentToken.type == TokenType::Keyword && currentToken.value == "true") {
-            advance(); // consume 'true'
-            return std::make_unique<BoolExpression>(true, line);
-        }
-
-        if (currentToken.type == TokenType::Keyword && currentToken.value == "false") {
-            advance(); // consume 'false'
-            return std::make_unique<BoolExpression>(false, line);
+        if (currentToken.type == TokenType::Keyword && (currentToken.value == "true" || currentToken.value == "false")) {
+            bool value = (currentToken.value == "true");
+            advance(); // consume 'true' or 'false'
+            return std::make_unique<BoolExpression>(value, line);
         }
 
         if (currentToken.type == TokenType::Symbol && currentToken.value == "[") {
@@ -594,7 +620,7 @@ private:
         return std::make_unique<IfStatement>(std::move(condition), std::move(thenBranch), std::move(elseBranch), line);
     }
 
-    std::unique_ptr<ASTNode> parseReturnStatement() {
+    std::unique_ptr<Statement> parseReturnStatement() {
         int line = currentToken.line;
         advance(); // consume 'return'
 
@@ -602,9 +628,87 @@ private:
 
         if (currentToken.value == ";") {
             advance(); // consume optional ';'
+        } else if (currentToken.value != "}" && currentToken.type != TokenType::EndOfFile) {
+            throw std::runtime_error("Expected ';' after 'return' statement at line " + std::to_string(line));
         }
 
         return std::make_unique<ReturnStatement>(std::move(expression), line);
+    }
+
+    std::unique_ptr<Statement> parseForStatement() {
+        int line = currentToken.line;
+        advance(); // consume 'for'
+
+        if (currentToken.value != "(") {
+            throw std::runtime_error("Expected '(' after 'for' at line " + std::to_string(line));
+        }
+        advance(); // consume '('
+
+        auto initializer = castToStatement(parseStatement());
+
+        if (currentToken.value != ";") {
+            throw std::runtime_error("Expected ';' after initializer in 'for' statement at line " + std::to_string(line));
+        }
+        advance(); // consume ';'
+
+        auto condition = parseExpression();
+
+        if (currentToken.value != ";") {
+            throw std::runtime_error("Expected ';' after condition in 'for' statement at line " + std::to_string(line));
+        }
+        advance(); // consume ';'
+
+        auto increment = castToStatement(parseExpressionStatement());
+
+        if (currentToken.value != ")") {
+            throw std::runtime_error("Expected ')' after increment in 'for' statement at line " + std::to_string(line));
+        }
+        advance(); // consume ')'
+
+        auto body = castToStatement(parseBlock());
+
+        return std::make_unique<ForStatement>(std::move(initializer), std::move(condition), std::move(increment), std::move(body), line);
+    }
+
+    std::unique_ptr<Statement> parseWhileStatement() {
+        int line = currentToken.line;
+        advance(); // consume 'while'
+
+        if (currentToken.value != "(") {
+            throw std::runtime_error("Expected '(' after 'while' at line " + std::to_string(line));
+        }
+        advance(); // consume '('
+
+        auto condition = parseExpression();
+
+        if (currentToken.value != ")") {
+            throw std::runtime_error("Expected ')' after condition at line " + std::to_string(line));
+        }
+        advance(); // consume ')'
+
+        auto body = castToStatement(parseBlock());
+
+        return std::make_unique<WhileStatement>(std::move(condition), std::move(body), line);
+    }
+
+    std::unique_ptr<Statement> parseIncludeStatement() {
+        int line = currentToken.line;
+        advance(); // consume 'include'
+
+        if (currentToken.type != TokenType::StringLiteral) {
+            throw std::runtime_error("Expected string literal after 'include' at line " + std::to_string(line));
+        }
+
+        std::string fileName = currentToken.value;
+        advance(); // consume string literal
+
+        if (currentToken.value == ";") {
+            advance(); // consume optional ';'
+        } else if (currentToken.value != "}" && currentToken.type != TokenType::EndOfFile) {
+            throw std::runtime_error("Expected ';' after 'include' statement at line " + std::to_string(line));
+        }
+
+        return std::make_unique<IncludeStatement>(fileName, line);
     }
 
     std::unique_ptr<ASTNode> parseBlock() {
@@ -637,71 +741,12 @@ private:
         }
     }
 
-    std::unique_ptr<ASTNode> parseForStatement() {
-        int line = currentToken.line;
-        advance(); // consume 'for'
-
-        if (currentToken.value != "(") {
-            throw std::runtime_error("Expected '(' after 'for' at line " + std::to_string(line));
-        }
-        advance(); // consume '('
-
-        auto initializer = castToStatement(parseStatement());
-
-        auto condition = parseExpression();
-        if (currentToken.value != ";") {
-            throw std::runtime_error("Expected ';' after condition in 'for' statement at line " + std::to_string(line));
-        }
-        advance(); // consume ';'
-
-        auto increment = castToStatement(parseExpressionStatement());
-
-        if (currentToken.value != ")") {
-            throw std::runtime_error("Expected ')' after increment in 'for' statement at line " + std::to_string(line));
-        }
-        advance(); // consume ')'
-
-        auto body = castToStatement(parseBlock());
-
-        return std::make_unique<ForStatement>(std::move(initializer), std::move(condition), std::move(increment), std::move(body), line);
-    }
-
-    std::unique_ptr<ASTNode> parseWhileStatement() {
-        int line = currentToken.line;
-        advance(); // consume 'while'
-
-        if (currentToken.value != "(") {
-            throw std::runtime_error("Expected '(' after 'while' at line " + std::to_string(line));
-        }
-        advance(); // consume '('
-
-        auto condition = parseExpression();
-
-        if (currentToken.value != ")") {
-            throw std::runtime_error("Expected ')' after condition at line " + std::to_string(line));
-        }
-        advance(); // consume ')'
-
-        auto body = castToStatement(parseBlock());
-
-        return std::make_unique<WhileStatement>(std::move(condition), std::move(body), line);
-    }
-
-    std::unique_ptr<ASTNode> parseIncludeStatement() {
-        int line = currentToken.line;
-        advance(); // consume 'include'
-
-        if (currentToken.type != TokenType::StringLiteral) {
-            throw std::runtime_error("Expected string literal after 'include' at line " + std::to_string(line));
-        }
-
-        std::string fileName = currentToken.value;
-        advance(); // consume string literal
-
-        if (currentToken.value == ";") {
-            advance(); // consume optional ';'
-        }
-
-        return std::make_unique<IncludeStatement>(fileName, line);
+    Token peekNextToken() {
+        size_t savedPosition = lexer.position;
+        int savedLine = lexer.line;
+        Token nextToken = lexer.getNextToken();
+        lexer.position = savedPosition;
+        lexer.line = savedLine;
+        return nextToken;
     }
 };
