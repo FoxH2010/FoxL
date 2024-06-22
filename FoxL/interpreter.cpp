@@ -55,6 +55,17 @@ private:
     std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> evaluateArrayExpression(const ArrayExpression* expr);
     std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> evaluateFunctionCallExpression(const FunctionCallExpression* expr);
 
+    std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> handleAssignment(const BinaryExpression* expr, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right);
+    std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> handleArrayAssignment(const IndexExpression* indexExpr, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right);
+    std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> handleAddition(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right);
+    std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> handleSubtraction(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right);
+    std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> handleMultiplication(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right);
+    std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> handleDivision(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right);
+    std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> handleLessThan(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right);
+    std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> handleGreaterThan(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right);
+    std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> handleLessThanOrEqual(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right);
+    std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> handleGreaterThanOrEqual(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right);
+
     bool isNumber(const std::string& s);
     bool isDouble(const std::string& s);
 
@@ -211,131 +222,167 @@ std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::
     auto right = evaluate(expr->right.get());
 
     if (expr->op == "=") {
-        if (const auto* leftVar = dynamic_cast<const VariableExpression*>(expr->left.get())) {
-            if (variables.find(leftVar->name) == variables.end()) {
-                throw std::runtime_error("Undefined variable: " + leftVar->name);
-            }
-            if (variables[leftVar->name].isConstant) {
-                throw std::runtime_error("Cannot assign to constant variable: " + leftVar->name);
-            }
-            auto rightValue = evaluate(expr->right.get());
-            variables[leftVar->name].value = rightValue;
-            return rightValue;
-        } else if (const auto* indexExpr = dynamic_cast<const IndexExpression*>(expr->left.get())) {
-            auto arrayVar = dynamic_cast<const VariableExpression*>(indexExpr->array.get());
-            if (!arrayVar) {
-                throw std::runtime_error("Array must be a variable.");
-            }
-
-            auto arrayValue = evaluate(arrayVar);
-            auto index = std::get<int>(evaluate(indexExpr->index.get()));
-            auto rightValue = evaluate(expr->right.get());
-
-            if (std::holds_alternative<std::vector<int>>(arrayValue)) {
-                auto& array = std::get<std::vector<int>>(variables[arrayVar->name].value);
-                if (index >= 0 && index < array.size()) {
-                    array[index] = std::get<int>(rightValue);
-                } else {
-                    throw std::runtime_error("Index out of bounds");
-                }
-            } else if (std::holds_alternative<std::vector<std::string>>(arrayValue)) {
-                auto& array = std::get<std::vector<std::string>>(variables[arrayVar->name].value);
-                if (index >= 0 && index < array.size()) {
-                    array[index] = std::get<std::string>(rightValue);
-                } else {
-                    throw std::runtime_error("Index out of bounds");
-                }
-            } else {
-                throw std::runtime_error("Variable is not an array");
-            }
-            return rightValue;
-        } else {
-            throw std::runtime_error("Unsupported left-hand side in assignment.");
-        }
-    }
-
-    if (expr->op == "+") {
-        if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
-            return std::get<int>(left) + std::get<int>(right);
-        } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
-            return std::get<double>(left) + std::get<double>(right);
-        } else if (std::holds_alternative<std::string>(left) && std::holds_alternative<std::string>(right)) {
-            return std::get<std::string>(left) + std::get<std::string>(right);
-        } else if (std::holds_alternative<std::string>(left) && std::holds_alternative<int>(right)) {
-            return std::get<std::string>(left) + std::to_string(std::get<int>(right));
-        } else if (std::holds_alternative<int>(left) && std::holds_alternative<std::string>(right)) {
-            return std::to_string(std::get<int>(left)) + std::get<std::string>(right);
-        } else {
-            throw std::runtime_error("Unsupported operand types for '+'.");
-        }
+        return handleAssignment(expr, left, right);
+    } else if (expr->op == "+") {
+        return handleAddition(left, right);
     } else if (expr->op == "-") {
-        if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
-            return std::get<int>(left) - std::get<int>(right);
-        } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
-            return std::get<double>(left) - std::get<double>(right);
-        } else {
-            throw std::runtime_error("Unsupported operand types for '-'.");
-        }
+        return handleSubtraction(left, right);
     } else if (expr->op == "*") {
-        if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
-            return std::get<int>(left) * std::get<int>(right);
-        } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
-            return std::get<double>(left) * std::get<double>(right);
-        } else {
-            throw std::runtime_error("Unsupported operand types for '*'.");
-        }
+        return handleMultiplication(left, right);
     } else if (expr->op == "/") {
-        if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
-            if (std::get<int>(right) == 0) {
-                throw std::runtime_error("Division by zero.");
-            }
-            return std::get<int>(left) / std::get<int>(right);
-        } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
-            if (std::get<double>(right) == 0.0) {
-                throw std::runtime_error("Division by zero.");
-            }
-            return std::get<double>(left) / std::get<double>(right);
-        } else {
-            throw std::runtime_error("Unsupported operand types for '/'.");
-        }
+        return handleDivision(left, right);
     } else if (expr->op == "==") {
         return left == right;
     } else if (expr->op == "!=") {
         return left != right;
     } else if (expr->op == "<") {
-        if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
-            return std::get<int>(left) < std::get<int>(right);
-        } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
-            return std::get<double>(left) < std::get<double>(right);
-        } else {
-            throw std::runtime_error("Unsupported operand types for '<'.");
-        }
+        return handleLessThan(left, right);
     } else if (expr->op == ">") {
-        if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
-            return std::get<int>(left) > std::get<int>(right);
-        } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
-            return std::get<double>(left) > std::get<double>(right);
-        } else {
-            throw std::runtime_error("Unsupported operand types for '>'.");
-        }
+        return handleGreaterThan(left, right);
     } else if (expr->op == "<=") {
-        if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
-            return std::get<int>(left) <= std::get<int>(right);
-        } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
-            return std::get<double>(left) <= std::get<double>(right);
-        } else {
-            throw std::runtime_error("Unsupported operand types for '<='.");
-        }
+        return handleLessThanOrEqual(left, right);
     } else if (expr->op == ">=") {
-        if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
-            return std::get<int>(left) >= std::get<int>(right);
-        } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
-            return std::get<double>(left) >= std::get<double>(right);
-        } else {
-            throw std::runtime_error("Unsupported operand types for '>='.");
-        }
+        return handleGreaterThanOrEqual(left, right);
     } else {
         throw std::runtime_error("Unsupported binary operator: " + expr->op);
+    }
+}
+
+std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::handleAssignment(const BinaryExpression* expr, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right) {
+    if (const auto* leftVar = dynamic_cast<const VariableExpression*>(expr->left.get())) {
+        if (variables.find(leftVar->name) == variables.end()) {
+            throw std::runtime_error("Undefined variable: " + leftVar->name);
+        }
+        if (variables[leftVar->name].isConstant) {
+            throw std::runtime_error("Cannot assign to constant variable: " + leftVar->name);
+        }
+        variables[leftVar->name].value = right;
+        return right;
+    } else if (const auto* indexExpr = dynamic_cast<const IndexExpression*>(expr->left.get())) {
+        return handleArrayAssignment(indexExpr, right);
+    } else {
+        throw std::runtime_error("Unsupported left-hand side in assignment.");
+    }
+}
+
+std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::handleArrayAssignment(const IndexExpression* indexExpr, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right) {
+    auto arrayVar = dynamic_cast<const VariableExpression*>(indexExpr->array.get());
+    if (!arrayVar) {
+        throw std::runtime_error("Array must be a variable.");
+    }
+
+    auto arrayValue = evaluate(arrayVar);
+    auto index = std::get<int>(evaluate(indexExpr->index.get()));
+
+    if (std::holds_alternative<std::vector<int>>(arrayValue)) {
+        auto& array = std::get<std::vector<int>>(variables[arrayVar->name].value);
+        if (index >= 0 && index < array.size()) {
+            array[index] = std::get<int>(right);
+        } else {
+            throw std::runtime_error("Index out of bounds");
+        }
+    } else if (std::holds_alternative<std::vector<std::string>>(arrayValue)) {
+        auto& array = std::get<std::vector<std::string>>(variables[arrayVar->name].value);
+        if (index >= 0 && index < array.size()) {
+            array[index] = std::get<std::string>(right);
+        } else {
+            throw std::runtime_error("Index out of bounds");
+        }
+    } else {
+        throw std::runtime_error("Variable is not an array");
+    }
+    return right;
+}
+
+std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::handleAddition(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right) {
+    if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
+        return std::get<int>(left) + std::get<int>(right);
+    } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
+        return std::get<double>(left) + std::get<double>(right);
+    } else if (std::holds_alternative<std::string>(left) && std::holds_alternative<std::string>(right)) {
+        return std::get<std::string>(left) + std::get<std::string>(right);
+    } else if (std::holds_alternative<std::string>(left) && std::holds_alternative<int>(right)) {
+        return std::get<std::string>(left) + std::to_string(std::get<int>(right));
+    } else if (std::holds_alternative<int>(left) && std::holds_alternative<std::string>(right)) {
+        return std::to_string(std::get<int>(left)) + std::get<std::string>(right);
+    } else {
+        throw std::runtime_error("Unsupported operand types for '+'.");
+    }
+}
+
+std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::handleSubtraction(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right) {
+    if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
+        return std::get<int>(left) - std::get<int>(right);
+    } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
+        return std::get<double>(left) - std::get<double>(right);
+    } else {
+        throw std::runtime_error("Unsupported operand types for '-'.");
+    }
+}
+
+std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::handleMultiplication(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right) {
+    if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
+        return std::get<int>(left) * std::get<int>(right);
+    } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
+        return std::get<double>(left) * std::get<double>(right);
+    } else {
+        throw std::runtime_error("Unsupported operand types for '*'.");
+    }
+}
+
+std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::handleDivision(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right) {
+    if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
+        if (std::get<int>(right) == 0) {
+            throw std::runtime_error("Division by zero.");
+        }
+        return std::get<int>(left) / std::get<int>(right);
+    } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
+        if (std::get<double>(right) == 0.0) {
+            throw std::runtime_error("Division by zero.");
+        }
+        return std::get<double>(left) / std::get<double>(right);
+    } else {
+        throw std::runtime_error("Unsupported operand types for '/'.");
+    }
+}
+
+std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::handleLessThan(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right) {
+    if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
+        return std::get<int>(left) < std::get<int>(right);
+    } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
+        return std::get<double>(left) < std::get<double>(right);
+    } else {
+        throw std::runtime_error("Unsupported operand types for '<'.");
+    }
+}
+
+std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::handleGreaterThan(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right) {
+    if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
+        return std::get<int>(left) > std::get<int>(right);
+    } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
+        return std::get<double>(left) > std::get<double>(right);
+    } else {
+        throw std::runtime_error("Unsupported operand types for '>'.");
+    }
+}
+
+std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::handleLessThanOrEqual(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right) {
+    if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
+        return std::get<int>(left) <= std::get<int>(right);
+    } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
+        return std::get<double>(left) <= std::get<double>(right);
+    } else {
+        throw std::runtime_error("Unsupported operand types for '<='.");
+    }
+}
+
+std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::handleGreaterThanOrEqual(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right) {
+    if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
+        return std::get<int>(left) >= std::get<int>(right);
+    } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
+        return std::get<double>(left) >= std::get<double>(right);
+    } else {
+        throw std::runtime_error("Unsupported operand types for '>='.");
     }
 }
 
