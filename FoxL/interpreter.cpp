@@ -13,6 +13,7 @@
 #include <iterator>
 #include <typeinfo>
 #include <optional>
+#include <filesystem>
 
 class ReturnException : public std::runtime_error {
 public:
@@ -24,6 +25,17 @@ public:
 
 class Interpreter {
 public:
+    Interpreter(const std::string& scriptFileName) {
+        std::string baseFileName = scriptFileName.substr(0, scriptFileName.find_last_of('.'));
+        dataFileName = baseFileName + ".FoxLData.foxl";
+        loadVariablesFromFile();
+    }
+
+    ~Interpreter() {
+        saveVariablesToFile();
+        std::filesystem::remove(dataFileName);
+    }
+
     void interpret(const std::vector<std::unique_ptr<Statement>>& statements) {
         for (const auto& statement : statements) {
             execute(statement.get());
@@ -40,10 +52,102 @@ private:
 
     std::unordered_map<std::string, Variable> variables;
     std::unordered_map<std::string, Function> functions;
+    std::string dataFileName;
 
     void execute(const Statement* statement);
 
     std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> evaluate(const Expression* expr);
+
+    void loadVariablesFromFile() {
+        std::ifstream inFile(dataFileName);
+        if (inFile) {
+            std::string line;
+            while (std::getline(inFile, line)) {
+                std::istringstream iss(line);
+                std::string type, name;
+                iss >> type >> name;
+
+                if (type == "variable" || type == "constant") {
+                    bool isConstant = (type == "constant");
+                    std::string valueStr;
+                    std::getline(iss, valueStr);
+                    std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> value;
+
+                    if (valueStr[0] == '[') {
+                        if (valueStr.find("\"") != std::string::npos) {
+                            std::vector<std::string> strArray;
+                            valueStr.erase(0, 1);
+                            valueStr.pop_back();
+                            std::istringstream arrayStream(valueStr);
+                            std::string element;
+                            while (std::getline(arrayStream, element, ',')) {
+                                element.erase(0, 1);
+                                element.pop_back();
+                                strArray.push_back(element);
+                            }
+                            value = strArray;
+                        } else { // Integer array
+                            std::vector<int> intArray;
+                            valueStr.erase(0, 1);
+                            valueStr.pop_back();
+                            std::istringstream arrayStream(valueStr);
+                            std::string element;
+                            while (std::getline(arrayStream, element, ',')) {
+                                intArray.push_back(std::stoi(element));
+                            }
+                            value = intArray;
+                        }
+                    } else if (valueStr == "true" || valueStr == "false") {
+                        value = (valueStr == "true");
+                    } else if (valueStr.find('.') != std::string::npos) {
+                        value = std::stod(valueStr);
+                    } else {
+                        value = std::stoi(valueStr);
+                    }
+
+                    variables[name] = { value, isConstant };
+                }
+            }
+        }
+    }
+
+    void saveVariablesToFile() {
+        std::ofstream outFile(dataFileName);
+        for (const auto& [name, variable] : variables) {
+            outFile << (variable.isConstant ? "constant" : "variable") << " " << name << " ";
+            std::visit([&](auto&& arg) {
+                using T = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_same_v<T, int>) {
+                    outFile << arg;
+                } else if constexpr (std::is_same_v<T, double>) {
+                    outFile << arg;
+                } else if constexpr (std::is_same_v<T, std::string>) {
+                    outFile << arg;
+                } else if constexpr (std::is_same_v<T, bool>) {
+                    outFile << (arg ? "true" : "false");
+                } else if constexpr (std::is_same_v<T, std::vector<int>>) {
+                    outFile << "[";
+                    for (size_t i = 0; i < arg.size(); ++i) {
+                        outFile << arg[i];
+                        if (i < arg.size() - 1) {
+                            outFile << ",";
+                        }
+                    }
+                    outFile << "]";
+                } else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
+                    outFile << "[";
+                    for (size_t i = 0; i < arg.size(); ++i) {
+                        outFile << "\"" << arg[i] << "\"";
+                        if (i < arg.size() - 1) {
+                            outFile << ",";
+                        }
+                    }
+                    outFile << "]";
+                }
+            }, variable.value);
+            outFile << std::endl;
+        }
+    }
 
     std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> evaluateNumberExpression(const NumberExpression* expr);
     std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> evaluateStringExpression(const StringExpression* expr);
@@ -90,19 +194,47 @@ void Interpreter::execute(const Statement* statement) {
                 throw std::runtime_error("Cannot reassign constant variable: " + varDecl->name);
             }
 
+            std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> value;
             if (varDecl->initializer) {
-                variables[varDecl->name] = { evaluate(varDecl->initializer.get()), varDecl->type == "const" };
+                value = evaluate(varDecl->initializer.get());
             } else {
-                if (varDecl->type == "int") {
-                    variables[varDecl->name] = { 0, varDecl->type == "const" };
-                } else if (varDecl->type == "double") {
-                    variables[varDecl->name] = { 0.0, varDecl->type == "const" };
-                } else if (varDecl->type == "str") {
-                    variables[varDecl->name] = { std::string(""), varDecl->type == "const" };
-                } else if (varDecl->type == "bool") {
-                    variables[varDecl->name] = { false, varDecl->type == "const" };
-                }
+                value = 0;
             }
+            variables[varDecl->name] = { value, varDecl->type == "const" };
+
+            std::ofstream outFile(dataFileName, std::ios_base::app);
+            outFile << (varDecl->type == "const" ? "constant" : "variable") << " " << varDecl->name << " ";
+            std::visit([&](auto&& arg) {
+                using T = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_same_v<T, int>) {
+                    outFile << arg;
+                } else if constexpr (std::is_same_v<T, double>) {
+                    outFile << arg;
+                } else if constexpr (std::is_same_v<T, std::string>) {
+                    outFile << arg;
+                } else if constexpr (std::is_same_v<T, bool>) {
+                    outFile << (arg ? "true" : "false");
+                } else if constexpr (std::is_same_v<T, std::vector<int>>) {
+                    outFile << "[";
+                    for (size_t i = 0; i < arg.size(); ++i) {
+                        outFile << arg[i];
+                        if (i < arg.size() - 1) {
+                            outFile << ",";
+                        }
+                    }
+                    outFile << "]";
+                } else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
+                    outFile << "[";
+                    for (size_t i = 0; i < arg.size(); ++i) {
+                        outFile << "\"" << arg[i] << "\"";
+                        if (i < arg.size() - 1) {
+                            outFile << ",";
+                        }
+                    }
+                    outFile << "]";
+                }
+            }, value);
+            outFile << std::endl;
         } else if (const auto* varExpr = dynamic_cast<const VariableExpression*>(statement)) {
             if (variables.find(varExpr->name) != variables.end() && !variables[varExpr->name].isConstant) {
                 variables[varExpr->name] = { evaluate(varExpr), false };
@@ -161,318 +293,40 @@ void Interpreter::execute(const Statement* statement) {
             }
         }
     } catch (const ReturnException& e) {
-        throw; // Rethrow to handle return value
+        throw;
     } catch (const std::exception& e) {
         std::cerr << "Error executing statement: " << e.what() << std::endl;
     }
 }
 
 std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::evaluate(const Expression* expr) {
-    try {
-        if (const auto* numberExpr = dynamic_cast<const NumberExpression*>(expr)) {
-            return evaluateNumberExpression(numberExpr);
-        } else if (const auto* strExpr = dynamic_cast<const StringExpression*>(expr)) {
-            return evaluateStringExpression(strExpr);
-        } else if (const auto* boolExpr = dynamic_cast<const BoolExpression*>(expr)) {
-            return evaluateBoolExpression(boolExpr);
-        } else if (const auto* varExpr = dynamic_cast<const VariableExpression*>(expr)) {
-            return evaluateVariableExpression(varExpr);
-        } else if (const auto* binExpr = dynamic_cast<const BinaryExpression*>(expr)) {
-            return evaluateBinaryExpression(binExpr);
-        } else if (const auto* readExpr = dynamic_cast<const ReadExpression*>(expr)) {
-            return evaluateReadExpression(readExpr);
-        } else if (const auto* indexExpr = dynamic_cast<const IndexExpression*>(expr)) {
-            return evaluateIndexExpression(indexExpr);
-        } else if (const auto* arrayExpr = dynamic_cast<const ArrayExpression*>(expr)) {
-            return evaluateArrayExpression(arrayExpr);
-        } else if (const auto* funcCallExpr = dynamic_cast<const FunctionCallExpression*>(expr)) {
-            return evaluateFunctionCallExpression(funcCallExpr);
+    if (const auto* numberExpr = dynamic_cast<const NumberExpression*>(expr)) {
+        return static_cast<int>(numberExpr->value); // Convert double to int for consistency
+    } else if (const auto* strExpr = dynamic_cast<const StringExpression*>(expr)) {
+        return strExpr->value;
+    } else if (const auto* boolExpr = dynamic_cast<const BoolExpression*>(expr)) {
+        return boolExpr->value;
+    } else if (const auto* varExpr = dynamic_cast<const VariableExpression*>(expr)) {
+        if (variables.find(varExpr->name) != variables.end()) {
+            return variables[varExpr->name].value;
+        } else {
+            throw std::runtime_error("Undefined variable: " + varExpr->name);
         }
-    } catch (const std::exception& e) {
-        throw std::runtime_error(std::string(e.what()) + " at line " + std::to_string(expr->line));
+    } else if (const auto* binExpr = dynamic_cast<const BinaryExpression*>(expr)) {
+        return evaluateBinaryExpression(binExpr);
+    } else if (const auto* readExpr = dynamic_cast<const ReadExpression*>(expr)) {
+        return evaluateReadExpression(readExpr);
+    } else if (const auto* indexExpr = dynamic_cast<const IndexExpression*>(expr)) {
+        return evaluateIndexExpression(indexExpr);
+    } else if (const auto* arrayExpr = dynamic_cast<const ArrayExpression*>(expr)) {
+        return evaluateArrayExpression(arrayExpr);
+    } else if (const auto* funcCallExpr = dynamic_cast<const FunctionCallExpression*>(expr)) {
+        return evaluateFunctionCallExpression(funcCallExpr);
     }
 
     std::stringstream ss;
     ss << "Unsupported expression type: " << typeid(*expr).name() << " at line " << std::to_string(expr->line);
     throw std::runtime_error(ss.str());
-}
-
-std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::evaluateNumberExpression(const NumberExpression* expr) {
-    return static_cast<int>(expr->value); // Convert double to int for consistency
-}
-
-std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::evaluateStringExpression(const StringExpression* expr) {
-    return expr->value;
-}
-
-std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::evaluateBoolExpression(const BoolExpression* expr) {
-    return expr->value;
-}
-
-std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::evaluateVariableExpression(const VariableExpression* expr) {
-    if (variables.find(expr->name) != variables.end()) {
-        return variables[expr->name].value;
-    } else {
-        throw std::runtime_error("Undefined variable: " + expr->name);
-    }
-}
-
-std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::evaluateBinaryExpression(const BinaryExpression* expr) {
-    auto left = evaluate(expr->left.get());
-    auto right = evaluate(expr->right.get());
-
-    if (expr->op == "=") {
-        return handleAssignment(expr, left, right);
-    } else if (expr->op == "+") {
-        return handleAddition(left, right);
-    } else if (expr->op == "-") {
-        return handleSubtraction(left, right);
-    } else if (expr->op == "*") {
-        return handleMultiplication(left, right);
-    } else if (expr->op == "/") {
-        return handleDivision(left, right);
-    } else if (expr->op == "==") {
-        return left == right;
-    } else if (expr->op == "!=") {
-        return left != right;
-    } else if (expr->op == "<") {
-        return handleLessThan(left, right);
-    } else if (expr->op == ">") {
-        return handleGreaterThan(left, right);
-    } else if (expr->op == "<=") {
-        return handleLessThanOrEqual(left, right);
-    } else if (expr->op == ">=") {
-        return handleGreaterThanOrEqual(left, right);
-    } else {
-        throw std::runtime_error("Unsupported binary operator: " + expr->op);
-    }
-}
-
-std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::handleAssignment(const BinaryExpression* expr, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right) {
-    if (const auto* leftVar = dynamic_cast<const VariableExpression*>(expr->left.get())) {
-        if (variables.find(leftVar->name) == variables.end()) {
-            throw std::runtime_error("Undefined variable: " + leftVar->name);
-        }
-        if (variables[leftVar->name].isConstant) {
-            throw std::runtime_error("Cannot assign to constant variable: " + leftVar->name);
-        }
-        variables[leftVar->name].value = right;
-        return right;
-    } else if (const auto* indexExpr = dynamic_cast<const IndexExpression*>(expr->left.get())) {
-        return handleArrayAssignment(indexExpr, right);
-    } else {
-        throw std::runtime_error("Unsupported left-hand side in assignment.");
-    }
-}
-
-std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::handleArrayAssignment(const IndexExpression* indexExpr, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right) {
-    auto arrayVar = dynamic_cast<const VariableExpression*>(indexExpr->array.get());
-    if (!arrayVar) {
-        throw std::runtime_error("Array must be a variable.");
-    }
-
-    auto arrayValue = evaluate(arrayVar);
-    auto index = std::get<int>(evaluate(indexExpr->index.get()));
-
-    if (std::holds_alternative<std::vector<int>>(arrayValue)) {
-        auto& array = std::get<std::vector<int>>(variables[arrayVar->name].value);
-        if (index >= 0 && index < array.size()) {
-            array[index] = std::get<int>(right);
-        } else {
-            throw std::runtime_error("Index out of bounds");
-        }
-    } else if (std::holds_alternative<std::vector<std::string>>(arrayValue)) {
-        auto& array = std::get<std::vector<std::string>>(variables[arrayVar->name].value);
-        if (index >= 0 && index < array.size()) {
-            array[index] = std::get<std::string>(right);
-        } else {
-            throw std::runtime_error("Index out of bounds");
-        }
-    } else {
-        throw std::runtime_error("Variable is not an array");
-    }
-    return right;
-}
-
-std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::handleAddition(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right) {
-    if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
-        return std::get<int>(left) + std::get<int>(right);
-    } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
-        return std::get<double>(left) + std::get<double>(right);
-    } else if (std::holds_alternative<std::string>(left) && std::holds_alternative<std::string>(right)) {
-        return std::get<std::string>(left) + std::get<std::string>(right);
-    } else if (std::holds_alternative<std::string>(left) && std::holds_alternative<int>(right)) {
-        return std::get<std::string>(left) + std::to_string(std::get<int>(right));
-    } else if (std::holds_alternative<int>(left) && std::holds_alternative<std::string>(right)) {
-        return std::to_string(std::get<int>(left)) + std::get<std::string>(right);
-    } else {
-        throw std::runtime_error("Unsupported operand types for '+'.");
-    }
-}
-
-std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::handleSubtraction(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right) {
-    if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
-        return std::get<int>(left) - std::get<int>(right);
-    } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
-        return std::get<double>(left) - std::get<double>(right);
-    } else {
-        throw std::runtime_error("Unsupported operand types for '-'.");
-    }
-}
-
-std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::handleMultiplication(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right) {
-    if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
-        return std::get<int>(left) * std::get<int>(right);
-    } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
-        return std::get<double>(left) * std::get<double>(right);
-    } else {
-        throw std::runtime_error("Unsupported operand types for '*'.");
-    }
-}
-
-std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::handleDivision(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right) {
-    if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
-        if (std::get<int>(right) == 0) {
-            throw std::runtime_error("Division by zero.");
-        }
-        return std::get<int>(left) / std::get<int>(right);
-    } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
-        if (std::get<double>(right) == 0.0) {
-            throw std::runtime_error("Division by zero.");
-        }
-        return std::get<double>(left) / std::get<double>(right);
-    } else {
-        throw std::runtime_error("Unsupported operand types for '/'.");
-    }
-}
-
-std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::handleLessThan(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right) {
-    if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
-        return std::get<int>(left) < std::get<int>(right);
-    } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
-        return std::get<double>(left) < std::get<double>(right);
-    } else {
-        throw std::runtime_error("Unsupported operand types for '<'.");
-    }
-}
-
-std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::handleGreaterThan(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right) {
-    if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
-        return std::get<int>(left) > std::get<int>(right);
-    } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
-        return std::get<double>(left) > std::get<double>(right);
-    } else {
-        throw std::runtime_error("Unsupported operand types for '>'.");
-    }
-}
-
-std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::handleLessThanOrEqual(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right) {
-    if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
-        return std::get<int>(left) <= std::get<int>(right);
-    } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
-        return std::get<double>(left) <= std::get<double>(right);
-    } else {
-        throw std::runtime_error("Unsupported operand types for '<='.");
-    }
-}
-
-std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::handleGreaterThanOrEqual(const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& left, const std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>>& right) {
-    if (std::holds_alternative<int>(left) && std::holds_alternative<int>(right)) {
-        return std::get<int>(left) >= std::get<int>(right);
-    } else if (std::holds_alternative<double>(left) && std::holds_alternative<double>(right)) {
-        return std::get<double>(left) >= std::get<double>(right);
-    } else {
-        throw std::runtime_error("Unsupported operand types for '>='.");
-    }
-}
-
-std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::evaluateReadExpression(const ReadExpression* expr) {
-    std::string prompt = "Enter value: ";
-    if (expr->prompt) {
-        prompt = std::get<std::string>(evaluate(expr->prompt.get()));
-    }
-    std::cout << prompt;
-    std::string input;
-    std::getline(std::cin, input);
-    if (isNumber(input)) {
-        return std::stoi(input);
-    } else if (isDouble(input)) {
-        return std::stod(input);
-    } else {
-        return input;
-    }
-}
-
-std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::evaluateIndexExpression(const IndexExpression* expr) {
-    auto arrayVar = evaluate(expr->array.get());
-    auto index = std::get<int>(evaluate(expr->index.get()));
-
-    if (std::holds_alternative<std::vector<int>>(arrayVar)) {
-        const auto& array = std::get<std::vector<int>>(arrayVar);
-        if (index >= 0 && index < array.size()) {
-            return array[index];
-        } else {
-            throw std::runtime_error("Index out of bounds");
-        }
-    } else if (std::holds_alternative<std::vector<std::string>>(arrayVar)) {
-        const auto& array = std::get<std::vector<std::string>>(arrayVar);
-        if (index >= 0 && index < array.size()) {
-            return array[index];
-        } else {
-            throw std::runtime_error("Index out of bounds");
-        }
-    } else {
-        throw std::runtime_error("Variable is not an array");
-    }
-}
-
-std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::evaluateArrayExpression(const ArrayExpression* expr) {
-    if (!expr->elements.empty()) {
-        if (dynamic_cast<const NumberExpression*>(expr->elements[0].get())) {
-            std::vector<int> intArray;
-            for (const auto& elem : expr->elements) {
-                intArray.push_back(std::get<int>(evaluate(elem.get())));
-            }
-            return intArray;
-        } else if (dynamic_cast<const StringExpression*>(expr->elements[0].get())) {
-            std::vector<std::string> stringArray;
-            for (const auto& elem : expr->elements) {
-                stringArray.push_back(std::get<std::string>(evaluate(elem.get())));
-            }
-            return stringArray;
-        } else {
-            throw std::runtime_error("Unsupported array element type.");
-        }
-    }
-    return {};
-}
-
-std::variant<int, double, std::string, bool, std::vector<int>, std::vector<std::string>> Interpreter::evaluateFunctionCallExpression(const FunctionCallExpression* expr) {
-    if (functions.find(expr->functionName) == functions.end()) {
-        throw std::runtime_error("Undefined function: " + expr->functionName);
-    }
-    auto& function = functions[expr->functionName];
-    auto& parameters = function.first;
-    auto& body = function.second;
-    if (parameters.size() != expr->arguments.size()) {
-        throw std::runtime_error("Function " + expr->functionName + " called with incorrect number of arguments");
-    }
-    std::unordered_map<std::string, Variable> localVariables = variables;
-    for (size_t i = 0; i < parameters.size(); ++i) {
-        localVariables[parameters[i]] = { evaluate(expr->arguments[i].get()), false };
-    }
-    auto oldVariables = variables;
-    variables = localVariables;
-    try {
-        for (const auto& stmt : body) {
-            execute(stmt.get());
-        }
-    } catch (const ReturnException& e) {
-        variables = oldVariables;
-        return e.value;
-    }
-    variables = oldVariables;
-    return 0; // Default return value if no return statement is encountered.
 }
 
 bool Interpreter::isNumber(const std::string& s) {
@@ -530,9 +384,8 @@ std::unique_ptr<Statement> Interpreter::cloneStatement(const Statement* stmt) {
         return std::make_unique<BlockStatement>(cloneStatements(blockStmt->statements), blockStmt->line);
     } else if (const auto* includeStmt = dynamic_cast<const IncludeStatement*>(stmt)) {
         return std::make_unique<IncludeStatement>(includeStmt->fileName, includeStmt->line);
-    } else {
-        throw std::runtime_error("Unsupported statement type");
     }
+    throw std::runtime_error("Unsupported statement type");
 }
 
 std::unique_ptr<Expression> Interpreter::cloneExpression(const Expression* expr) {
@@ -562,7 +415,6 @@ std::unique_ptr<Expression> Interpreter::cloneExpression(const Expression* expr)
             arguments.push_back(cloneExpression(arg.get()));
         }
         return std::make_unique<FunctionCallExpression>(funcCallExpr->functionName, std::move(arguments), funcCallExpr->line);
-    } else {
-        throw std::runtime_error("Unsupported expression type");
     }
+    throw std::runtime_error("Unsupported expression type");
 }
