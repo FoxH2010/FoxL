@@ -1,5 +1,5 @@
 # FoxL
-FoxH's Programming Language Project.   
+FoxH's Programming Language Project (known as **FoxL**).   
   
 [![CodeFactor](https://www.codefactor.io/repository/github/foxh2010/foxl/badge/dev)](https://www.codefactor.io/repository/github/foxh2010/foxl/overview/dev)  
 ## Description  
