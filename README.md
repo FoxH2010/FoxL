@@ -6,7 +6,7 @@ FoxH's Programming Language Project.
 [cf-site]: https://www.codefactor.io/repository/github/foxh2010/foxl
 [cf-image]: https://www.codefactor.io/repository/github/foxh2010/foxl/badge  
 ## Description  
-This programming language (FoxL) was created, expect to be a high-level prgramming language that's ease to use for web-developer. Might release the next year.  
+This programming language (FoxL) was created, expect to be a high-level prgramming language desktop application developing language that's ease to use for web-developer. Might release the next year.  
 FoxL is for application developing, rather than web. But I hopes you'll find it suit yourself.
 ### Disclaimer  
 This project have been transfered from Sharp Fox to FoxH. We still include Sharp Fox's name in the License, but it'll be gone soon enough.  
