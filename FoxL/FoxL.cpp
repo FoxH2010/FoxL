@@ -56,7 +56,7 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        Interpreter interpreter;
+        Interpreter interpreter(arg1);
         interpreter.interpret(statements);
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;

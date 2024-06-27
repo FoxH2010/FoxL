@@ -412,6 +412,7 @@ private:
 
     std::unique_ptr<ASTNode> parseLetDeclaration() {
         int line = currentToken.line;
+        std::string type = currentToken.value; // 'let' or 'const'
         advance(); // consume 'let' or 'const'
 
         if (currentToken.type != TokenType::Identifier) {
@@ -434,7 +435,7 @@ private:
             throw std::runtime_error("Expected ';' after let/const declaration at line " + std::to_string(line));
         }
 
-        return std::make_unique<VariableDeclaration>("auto", name, std::move(initializer), line);
+        return std::make_unique<VariableDeclaration>(type, name, std::move(initializer), line);
     }
 
     std::unique_ptr<Expression> parseExpression() {
@@ -478,7 +479,6 @@ private:
             }
 
             if (currentToken.type == TokenType::Symbol && currentToken.value == "(") {
-                // Function call parsing
                 advance(); // consume '('
                 std::vector<std::unique_ptr<Expression>> arguments;
                 while (currentToken.type != TokenType::Symbol || currentToken.value != ")") {
