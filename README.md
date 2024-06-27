@@ -8,7 +8,7 @@ FoxL is for application developing, rather than web. But I hopes you'll find it 
 ### Disclaimer  
 This project have been transfered from Sharp Fox to FoxH. We still include Sharp Fox's name in the License, but it'll be gone soon enough.  
 ### Version  
-The current latest version of FoxL is FoxL 0.0.3 (FoxL v0.0.3). FoxL 0.0.4 is currently under development under the [dev branch](https://github.com/FoxH2010/FoxL/tree/dev).
+The current latest version of FoxL is FoxL 0.0.3 (FoxL v0.0.3). FoxL 0.0.4 is currently developing under the [dev branch](https://github.com/FoxH2010/FoxL/tree/dev).
 ## How to use
 Oh well, you just need to first download the interpreter of FoxL, which is the `FoxL.exe` you may find in the release section.  
 After that, if you're on Windows, you're going use the command prompt like the following:  
