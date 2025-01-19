@@ -29,4 +29,4 @@ Programmer - FoxH
 Idea - FoxH  
 Update/bug fixing - FoxH  
 ## **License**  
-See `LICENSE`
+See [`LICENSE`](https://github.com/FoxH2010/FoxL/tree/master?tab=MIT-1-ov-file)
