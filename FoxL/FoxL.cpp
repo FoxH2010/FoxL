@@ -1,4 +1,5 @@
 #include "lexer.cpp"
+#include "token.h"
 #include "parser.cpp"
 #include "interpreter.cpp"
 #include <iostream>
@@ -7,7 +8,7 @@
 #include <vector>
 #include <memory>
 
-const std::string VERSION = "0.0.3";
+const std::string VERSION = "0.0.4";
 
 void displayUsage(const char* programName) {
     std::cout << "Usage: " << programName << " <file_name.foxl>\n";
@@ -44,20 +45,22 @@ int main(int argc, char* argv[]) {
     std::string input((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     file.close();
 
+    // Instantiate Lexer, Parser, Environment, and Interpreter
     Lexer lexer(input);
     Parser parser(lexer);
+    auto environment = std::make_shared<Environment>();
+    Interpreter interpreter(environment);
 
     try {
-        std::vector<std::unique_ptr<Statement>> statements;
+        // Parse and interpret the input
         while (auto ast = parser.parse()) {
-            if (auto stmt = dynamic_cast<Statement*>(ast.get())) {
-                statements.push_back(std::unique_ptr<Statement>(stmt));
-                ast.release();
+            // Ensure the parsed AST node is valid
+            if (!ast) {
+                throw std::runtime_error("Parsed AST is null.");
             }
-        }
 
-        Interpreter interpreter(arg1);
-        interpreter.interpret(statements);
+            interpreter.interpret(ast);  // Interpret the current AST node
+        }
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
         return 1;

@@ -1,201 +1,185 @@
-#include <iostream>
-#include <string>
-#include <vector>
+#include "lexer.h"
 #include <cctype>
-#include <fstream>
-#include <unordered_set>
+#include <stdexcept>
+#include <algorithm> // For std::find
 
-enum class TokenType {
-    Keyword,
-    Identifier,
-    Number,
-    Operator,
-    Symbol,
-    StringLiteral,
-    EndOfFile,
-    Unknown
-};
+Lexer::Lexer(const std::string &source)
+    : source(source), position(0), line(1) {}
 
-struct Token {
-    TokenType type;
-    std::string value;
-    int line;
-
-    Token(TokenType type, std::string value, int line) : type(type), value(std::move(value)), line(line) {}
-};
-
-class Lexer {
-public:
-    size_t position;
-    int line;
-    explicit Lexer(const std::string &source) : source(source), position(0), line(1) {}
-
-    Token getNextToken() {
-        while (position < source.size()) {
-            char currentChar = source[position];
-
-            if (isspace(currentChar)) {
-                if (currentChar == '\n') {
-                    ++line;
-                }
-                ++position;
-                continue;
-            }
-
-            if (currentChar == '/' && position + 1 < source.size() && source[position + 1] == '/') {
-                skipSingleLineComment();
-                continue;
-            }
-
-            if (isalpha(currentChar) || (currentChar & 0x80)) {
-                return lexIdentifierOrKeyword();
-            }
-
-            if (isdigit(currentChar)) {
-                return lexNumber();
-            }
-
-            if (isOperator(currentChar)) {
-                return lexOperator();
-            }
-
-            if (isSymbol(currentChar)) {
-                return lexSymbol();
-            }
-
-            if (currentChar == '\'' || currentChar == '"') {
-                return lexStringLiteral(currentChar);
-            }
-
-            throw std::runtime_error("Unknown keyword at line " + std::to_string(line));
-        }
-
-        return Token(TokenType::EndOfFile, "", line);
-    }
-
-    void registerIdentifier(const std::string &identifier) {
-        identifiers.insert(identifier);
-    }
-
-private:
-    std::string source;
-    std::unordered_set<std::string> identifiers;
-
-    void skipSingleLineComment() {
-        while (position < source.size() && source[position] != '\n') {
-            ++position;
-        }
-        if (position < source.size() && source[position] == '\n') {
-            ++line;
-            ++position;
-        }
-    }
-
-    Token lexIdentifierOrKeyword() {
-        size_t start = position;
-        while (position < source.size() && (isalnum(source[position]) || source[position] == '_' || (source[position] & 0x80))) {
-            ++position;
-        }
-        std::string value = source.substr(start, position - start);
-
-        if (isKeyword(value)) {
-            return Token(TokenType::Keyword, value, line);
-        }
-
-        if (identifiers.find(value) != identifiers.end()) {
-            return Token(TokenType::Identifier, value, line);
-        }
-
-        return Token(TokenType::Identifier, value, line);
-    }
-
-    Token lexNumber() {
-        size_t start = position;
-        bool hasDot = false;
-        while (position < source.size() && (isdigit(source[position]) || (source[position] == '.' && !hasDot))) {
-            if (source[position] == '.') hasDot = true;
-            ++position;
-        }
-        return Token(TokenType::Number, source.substr(start, position - start), line);
-    }
-
-    Token lexOperator() {
-        size_t start = position;
+Token Lexer::getNextToken() {
+    while (position < source.size()) {
         char currentChar = source[position];
 
-        if ((currentChar == '!' || currentChar == '=' || currentChar == '<' || currentChar == '>') &&
-            position + 1 < source.size() && source[position + 1] == '=') {
-            position += 2;
-            return Token(TokenType::Operator, source.substr(start, 2), line);
+        if (isspace(currentChar)) {
+            handleWhitespace();
+            continue;
         }
 
-        if ((currentChar == '+' || currentChar == '-' || currentChar == '*' || currentChar == '/') &&
-            position + 1 < source.size() && source[position + 1] == currentChar) {
-            position += 2;
-            return Token(TokenType::Operator, source.substr(start, 2), line);
+        if (isCommentStart(currentChar)) {
+            skipSingleLineComment();
+            continue;
         }
 
-        if ((currentChar == '+' && source[position + 1] == '+') || (currentChar == '-' && source[position + 1] == '-')) {
-            position += 2;
-            return Token(TokenType::Operator, source.substr(start, 2), line);
+        if (isIdentifierStart(currentChar)) {
+            return lexIdentifierOrKeyword();
         }
 
-        return Token(TokenType::Operator, std::string(1, source[position++]), line);
+        if (isdigit(currentChar)) {
+            return lexNumber();
+        }
+
+        if (isOperator(currentChar)) {
+            return lexOperator();
+        }
+
+        if (isSymbol(currentChar)) {
+            return lexSymbol();
+        }
+
+        if (isStringStart(currentChar)) {
+            return lexStringLiteral(currentChar);
+        }
+
+        throw std::runtime_error("Unknown character at line " + std::to_string(line));
     }
 
-    Token lexSymbol() {
-        return Token(TokenType::Symbol, std::string(1, source[position++]), line);
+    return Token(TokenType::EndOfFile, "", line);
+}
+
+void Lexer::registerIdentifier(const std::string &identifier) {
+    identifiers.insert(identifier);
+}
+
+void Lexer::handleWhitespace() {
+    while (position < source.size() && isspace(source[position])) {
+        if (source[position] == '\n') {
+            ++line;
+        }
+        ++position;
+    }
+}
+
+bool Lexer::isCommentStart(char currentChar) const {
+    return currentChar == '/' && position + 1 < source.size() && source[position + 1] == '/';
+}
+
+void Lexer::skipSingleLineComment() {
+    while (position < source.size() && source[position] != '\n') {
+        ++position;
+    }
+    if (position < source.size() && source[position] == '\n') {
+        ++line;
+        ++position;
+    }
+}
+
+bool Lexer::isIdentifierStart(char ch) const {
+    return isalpha(ch) || (ch & 0x80); // Support for extended ASCII
+}
+
+bool Lexer::isIdentifierPart(char ch) const {
+    return isalnum(ch) || ch == '_' || (ch & 0x80);
+}
+
+bool Lexer::isStringStart(char ch) const {
+    return ch == '"' || ch == '\'';
+}
+
+bool Lexer::isOperator(char ch) const {
+    static const std::string operators = "+-*/%=&|<>!^";
+    return operators.find(ch) != std::string::npos;
+}
+
+bool Lexer::isSymbol(char ch) const {
+    static const std::string symbols = ";(){}[],:.@";
+    return symbols.find(ch) != std::string::npos;
+}
+
+bool Lexer::isTwoCharOperator(char ch) const {
+    static const std::vector<std::string> twoCharOperators = {
+        "==", "!=", "<=", ">=", "&&", "||", "++", "--", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<", ">>"
+    };
+    return std::find(twoCharOperators.begin(), twoCharOperators.end(), source.substr(position, 2)) != twoCharOperators.end();
+}
+
+char Lexer::parseEscapeCharacter(char ch) const {
+    switch (ch) {
+        case 'n': return '\n';
+        case 't': return '\t';
+        case '\\': return '\\';
+        case '\'': return '\'';
+        case '"': return '"';
+        default: return ch;
+    }
+}
+
+Token Lexer::lexIdentifierOrKeyword() {
+    size_t start = position;
+    while (position < source.size() && isIdentifierPart(source[position])) {
+        ++position;
+    }
+    std::string value = source.substr(start, position - start);
+
+    if (isKeyword(value)) {
+        return Token(TokenType::Keyword, value, line);
     }
 
-    Token lexStringLiteral(char quoteType) {
-        ++position; // consume the opening quote
-        size_t start = position;
-        std::string value;
-        while (position < source.size() && source[position] != quoteType) {
-            if (source[position] == '\\' && position + 1 < source.size()) {
-                ++position;
-                switch (source[position]) {
-                    case 'n': value += '\n'; break;
-                    case 't': value += '\t'; break;
-                    case '\\': value += '\\'; break;
-                    case '\'': value += '\''; break;
-                    case '"': value += '\"'; break;
-                    default: value += source[position]; break;
-                }
-            } else {
-                value += source[position];
-            }
+    return Token(TokenType::Identifier, value, line);
+}
+
+Token Lexer::lexNumber() {
+    size_t start = position;
+    bool hasDot = false;
+
+    while (position < source.size() && (isdigit(source[position]) || (source[position] == '.' && !hasDot))) {
+        if (source[position] == '.') hasDot = true;
+        ++position;
+    }
+
+    return Token(TokenType::Number, source.substr(start, position - start), line);
+}
+
+Token Lexer::lexOperator() {
+    size_t start = position;
+
+    if (isTwoCharOperator(source[position])) {
+        position += 2;
+        return Token(TokenType::Operator, source.substr(start, 2), line);
+    }
+
+    return Token(TokenType::Operator, std::string(1, source[position++]), line);
+}
+
+Token Lexer::lexSymbol() {
+    return Token(TokenType::Symbol, std::string(1, source[position++]), line);
+}
+
+Token Lexer::lexStringLiteral(char quoteType) {
+    ++position; // Consume opening quote
+    std::string value;
+
+    while (position < source.size() && source[position] != quoteType) {
+        if (source[position] == '\\') {
             ++position;
+            value += parseEscapeCharacter(source[position]);
+        } else {
+            value += source[position];
         }
-
-        if (position >= source.size()) {
-            throw std::runtime_error("Unterminated string literal");
-        }
-
-        ++position; // consume the closing quote
-        return Token(TokenType::StringLiteral, value, line);
+        ++position;
     }
 
-    bool isKeyword(const std::string &str) const {
-        static const std::vector<std::string> keywords = {
-            "if", "else", "while", "return", "write", "read", "func", "for", "include", "let", "const"
-        };
-
-        for (const auto &keyword : keywords) {
-            if (str == keyword) {
-                return true;
-            }
-        }
-        return false;
+    if (position >= source.size()) {
+        throw std::runtime_error("Unterminated string literal at line " + std::to_string(line));
     }
+    ++position; // Consume closing quote
 
-    bool isOperator(char ch) const {
-        static const std::string operators = "+-*/=!><";
-        return operators.find(ch) != std::string::npos;
-    }
+    return Token(TokenType::StringLiteral, value, line);
+}
 
-    bool isSymbol(char ch) const {
-        static const std::string symbols = "();{},[]";
-        return symbols.find(ch) != std::string::npos;
-    }
-};
+bool Lexer::isKeyword(const std::string &str) const {
+    static const std::vector<std::string> keywords = {
+        "if", "else", "while", "return", "write", "read", "for", "include", "let", "const",
+        "function", "class", "public", "private", "protected", "in", "from"
+    };
+    return std::find(keywords.begin(), keywords.end(), str) != keywords.end();
+}
