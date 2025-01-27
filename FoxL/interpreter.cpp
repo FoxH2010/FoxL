@@ -655,7 +655,6 @@ void Interpreter::executeFunctionDeclaration(const FunctionDeclaration *funcDecl
 
     // Create a callable lambda for the function
     auto function = [funcDecl, environment = this->environment, bodyClone](const std::vector<Value> &arguments) -> Value {
-
         // Ensure correct argument count
         if (arguments.size() != funcDecl->parameters.size()) {
             throw std::runtime_error("Function '" + funcDecl->name + "' expects " +
@@ -688,7 +687,6 @@ void Interpreter::executeFunctionDeclaration(const FunctionDeclaration *funcDecl
 }
 
 Value Interpreter::evaluateFunctionCall(const FunctionCallExpression *funcCall) {
-
     // Handle built-in `read` function
     if (funcCall->functionName == "read") {
         std::string prompt = funcCall->arguments.empty() ? "" : stringifyValue(evaluateExpression(funcCall->arguments[0].get()));

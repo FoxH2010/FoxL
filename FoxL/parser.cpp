@@ -63,7 +63,6 @@ std::unique_ptr<Statement> Parser::parseVariableReassignment() {
 }
 
 std::unique_ptr<ASTNode> Parser::parseStatement() {
-
     int line = currentToken.line;
 
     if (currentToken.type == TokenType::EndOfFile) {
