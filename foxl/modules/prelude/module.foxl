@@ -1,0 +1,22 @@
+let identity = function(value) {
+    return value;
+};
+
+function twice(fn, value) {
+    return fn(fn(value));
+}
+
+class Counter {
+    function init(start) {
+        this.value = start;
+    }
+
+    function inc() {
+        this.value = this.value + 1;
+        return this.value;
+    }
+
+    function get() {
+        return this.value;
+    }
+}

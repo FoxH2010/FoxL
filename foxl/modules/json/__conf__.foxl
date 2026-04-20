@@ -1,0 +1,5 @@
+let name = "json";
+let namespace = true;
+let builtin = "json";
+let source = "";
+let exports = ["parse", "stringify"];

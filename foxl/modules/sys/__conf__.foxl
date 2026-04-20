@@ -1,0 +1,5 @@
+let name = "sys";
+let namespace = true;
+let builtin = "sys";
+let source = "";
+let exports = ["run", "capture"];

@@ -1,0 +1,5 @@
+let name = "http";
+let namespace = true;
+let builtin = "http";
+let source = "";
+let exports = ["fetch", "get", "post", "getJson"];

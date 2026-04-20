@@ -1,0 +1,168 @@
+/* FoxL Language Prototype 
+   Author: Marisa (魔理沙)
+   Status: Interpreted (Bytecode JIT planned)
+*/
+
+import fs;
+import json;
+import num;
+import sys;
+
+// --- 1. Standard Library Namespaces ---
+
+// File System [cite: 1, 5]
+write(fs.exists("path")); // Boolean
+write(fs.read("path"));   // String
+fs.write("path", "content");
+fs.append("path", "content");
+fs.delete("path");
+fs.mkdir("path");
+fs.rmdir("path");
+fs.list("path");   // Array of Strings
+
+// JSON Handling [cite: 8, 9]
+write(json.parse("string"));
+write(json.stringify({object}));
+
+// Mathematical Operations [cite: 4]
+write(num.random()); // Number (0-1)
+write(num.floor(number));
+write(num.ceil(number));
+
+// Process Management [cite: 1]
+write(sys.run("command", ["arg1", "arg2"])); // Returns exit code
+
+// --- 2. Global Literal I/O and Type Conversion ---
+
+// Literal I/O [cite: 2, 6]
+write("Hello World"); 
+let userInput = read("Enter input: "); // Accepts prompt as argument [cite: 2]
+
+// Type Conversion (Shortened Syntax) [cite: 1]
+let s = str(100);    // toString
+let i = int("100");  // toNumber
+let f = float("1.5");
+let b = bool(1);     // toBoolean
+
+// --- 3. Core Syntax and Data Structures ---
+
+// Records [cite: 7, 25]
+record User { name: String, age: Number }
+record Point { x: Number, y: Number }
+
+// Strict Equality [cite: 10, 11]
+let a = 1;
+let b = "1";
+write(a == b);  // true (loose)
+write(a === b); // false (strict)
+
+// Pipelines [cite: 12]
+let processed = [1, 2, 3, 4, 5] 
+	|> filter(x -> x > 2) 
+	|> map(x -> x * 2);
+
+// Spread & Rest [cite: 24]
+let listA = [1, 2];
+let listB = [...listA, 3, 4];
+
+// --- 4. Error Handling (Alternative System) ---
+
+// raise [cite: 17]
+function getAge() {
+	let input = read("Age: ");
+	let age = int(input);
+	if (age < 0) {
+		raise ValueError("Age cannot be negative");
+	}
+	return age;
+}
+
+// Result Type Alternative [cite: 13, 14, 15]
+function safeParse(input: String) -> Result<Number, String> {
+	try {
+		return Ok(int(input));
+	} catch (e) {
+		return Err("Invalid number format");
+	}
+}
+
+// Try/Catch Block [cite: 9]
+try {
+	let age = getAge();
+	write("User age: " + age);
+} catch (e) {
+	match e {
+		ValueError(msg) -> write("Value Error: " + msg);
+		_ -> write("Caught error: " + e);
+	}
+}
+
+// --- 5. Advanced Pattern Matching ---
+
+// Value and Range Matching [cite: 18, 19]
+function processCode(code: Number) {
+	match code {
+		200 -> write("OK");
+		404 -> write("Not Found");
+		400 | 401 -> write("Client Error");
+		x if x >= 500 -> write("Server Error");
+		_ -> write("Unknown Code");
+	}
+}
+
+// Record Matching [cite: 20, 21, 22, 26, 27]
+function processRecord(point: Point) {
+	match point {
+		Point{x: 0, y: y} -> write("On Y axis: " + y);
+		Point{x: x, y: 0} -> write("On X axis: " + x);
+		Point{x: x, y: y} -> write("Point at (" + x + "," + y + ")");
+	}
+}
+
+// List Matching [cite: 23, 24]
+function processList(items: [Any]) {
+	match items {
+		[] -> write("Empty");
+		[first] -> write("Single: " + first);
+		[first, ..., last] -> write("Ends: " + first + ", " + last);
+		_ -> write("Generic list");
+	}
+}
+
+// --- 6. Concurrency and Async ---
+
+// Actors [cite: 16, 17]
+actor Logger {
+	function log(msg: String) {
+		write("[ACTOR LOG]: " + msg);
+	}
+}
+
+let logger = spawn Logger();
+send(logger, "log", "Message sent to actor");
+
+// Async/Await [cite: 3, 4]
+async function fetchData(url: String) -> Result<String, String> {
+	try {
+		let response = await fetch(url);
+		return Ok(response);
+	} catch (e) {
+		return Err("Fetch failed");
+	}
+}
+
+// --- 7. Control Flow Expressions ---
+
+// If-Else Expression [cite: 31]
+let result = if (fs.exists("config.foxl")) "Loaded" else "Default";
+
+/* [cite: 29, 30]
+	Standard C++ style loops (while, for) are supported.
+	Expressions and statements are distinguished by context.
+
+	Codes and code blocks are treated differently.
+	if (condition) code;
+	The code would still be executed. The same goes for other statements.
+	But something like this also works:
+	result = if (true) "yes" else "no";
+*/

@@ -1,0 +1,3 @@
+let name = "prelude";
+let source = "module.foxl";
+let exports = ["identity", "twice", "Counter"];

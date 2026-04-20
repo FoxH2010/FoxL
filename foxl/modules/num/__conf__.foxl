@@ -1,0 +1,5 @@
+let name = "num";
+let namespace = true;
+let builtin = "num";
+let source = "";
+let exports = ["random", "floor", "ceil"];

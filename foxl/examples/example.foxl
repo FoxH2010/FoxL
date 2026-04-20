@@ -1,0 +1,145 @@
+import prelude;
+import fs;
+import json;
+import num as nums;
+import cli;
+import http;
+
+function add(a, b) {
+    return a + b;
+}
+
+write(add(2, 3));
+write(identity("foxl"));
+
+function factorial(n: Number) -> Number {
+    if (n <= 1) {
+        return 1;
+    }
+
+    return n * factorial(n - 1);
+}
+
+write(factorial(5));
+
+let a: Number = 1;
+let b: String = "1";
+write(a == b);
+write(a === b);
+
+let numbers = [1, 2, 3];
+let expanded = [...numbers, 4, 5];
+write(expanded);
+
+let pipelineResult = [1, 2, 3, 4, 5]
+    |> filter(x -> x > 2)
+    |> map(x -> x * 2);
+write(pipelineResult);
+
+let status = if (factorial(3) == 6) "ok" else "bad";
+write(status);
+
+match 404 {
+    200 -> write("ok");
+    400 | 401 -> write("client");
+    404 -> write("missing");
+    _ -> write("unknown");
+}
+
+record Point { x: Number, y: Number }
+
+function describePoint(point: Point) {
+    match point {
+        Point{x: 0, y: y} -> write("y-axis:" + y);
+        Point{x: x, y: 0} -> write("x-axis:" + x);
+        Point{x: x, y: y} -> write("point:" + x + "," + y);
+    }
+}
+
+describePoint(Point(0, 7));
+describePoint(Point(4, 0));
+describePoint(Point(2, 3));
+
+function describeList(items: [Any]) {
+    match items {
+        [] -> write("empty");
+        [first] -> write("single:" + first);
+        [first, ..., last] -> write("ends:" + first + "," + last);
+        _ -> write("generic");
+    }
+}
+
+describeList([]);
+describeList([9]);
+describeList([1, 2, 3, 4]);
+
+function fail() {
+    raise ValueError("boom");
+}
+
+try {
+    fail();
+} catch (e) {
+    match e {
+        ValueError(msg) -> write("caught:" + msg);
+        _ -> write("unexpected");
+    }
+}
+
+actor Logger {
+    function log(msg: String) {
+        write("[actor]" + msg);
+    }
+}
+
+let logger = spawn Logger();
+send(logger, "log", "hello");
+
+let payload = {name: "fox", score: 9};
+write(json.stringify(payload));
+write(fs.exists("foxl"));
+write(json.stringify({payload}));
+
+function safeParse(input: String) -> Result<Number, String> {
+    try {
+        return Ok(int(input));
+    } catch (e) {
+        return Err("bad-int");
+    }
+}
+
+write(json.stringify(safeParse("42")));
+write(json.stringify(safeParse("oops")));
+
+async function fetchData(url: String) -> Result<String, String> {
+    try {
+        let response = await fetch(url);
+        return Ok(response);
+    } catch (e) {
+        return Err("fetch-failed");
+    }
+}
+
+write(json.stringify(fetchData("data:text/plain,foxl-fetch")));
+write(http.get("data:text/plain,http-ok"));
+write(json.stringify(http.getJson("data:application/json,%7B%22ok%22%3Atrue%7D")));
+write(nums.floor(3.8));
+
+let square: Function = function(value: Number) -> Number {
+    return value * value;
+};
+
+write(square(6));
+write(twice(function(value) {
+    return value + 3;
+}, 4));
+write(bool(cli.which("python")));
+write(cli.args());
+
+let counter = Counter(10);
+let typedCounter: Counter = counter;
+write(counter.get());
+write(counter.inc());
+write(counter.inc());
+
+write(read("Hi: "))

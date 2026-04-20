@@ -1,0 +1,5 @@
+let name = "cli";
+let namespace = true;
+let builtin = "cli";
+let source = "";
+let exports = ["run", "capture", "which", "args", "cwd", "env"];

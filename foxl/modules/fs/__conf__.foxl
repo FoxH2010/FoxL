@@ -1,0 +1,5 @@
+let name = "fs";
+let namespace = true;
+let builtin = "fs";
+let source = "";
+let exports = ["exists", "read", "write", "append", "delete", "mkdir", "rmdir", "list"];
