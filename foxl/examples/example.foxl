@@ -1,3 +1,4 @@
+// These are the standard libraries, they aren't included in the interpreter executable so you have to manually download them yourself
 import prelude;
 import fs;
 import json;
