@@ -5,12 +5,10 @@ FoxH's Programming Language Project (known as **FoxL**).
 ## Description  
 This programming language (FoxL) was created, expect to be a high-level prgramming language desktop application developing language that's ease to use for web-developer. Might release the next year.  
 FoxL is for application developing, rather than web. But I hopes you'll find it suit yourself.
-### Disclaimer  
-This project have been transfered from Sharp Fox to FoxH. We still include Sharp Fox's name in the License, but it'll be gone soon enough.  
 ### Version  
-The current latest version of FoxL is FoxL v0.0.3.
+The current latest version of FoxL is FoxL v0.0.4.
 ## How to use
-Oh well, you just need to first download the interpreter of FoxL, which is the `FoxL.exe` you may find in the release section.  
+Oh well, you just need to first download the interpreter of FoxL, which is the `foxl.exe` you may find in the release section.  
 After that, if you're on Windows, you're going use the command prompt like the following:  
 ```bat
 <foxl_interpreter_path> <your_file>.foxl
